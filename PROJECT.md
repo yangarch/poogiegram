@@ -964,6 +964,11 @@ sudo dmesg | grep -iE 'huc|guc'
 | **H.264 인코드** | **`EncSlice` + `EncSliceLP` 둘 다** | ✅ **VME 경로 사용 — `-low_power` 불필요** |
 | JPEG 디코드/인코드 | `VLD` / `EncPicture` | ✅ |
 | VP9 / VP8 디코드 | `VAEntrypointVLD` | ✅ |
+| **VPP (후처리)** | `VAProfileNone : VAEntrypointVideoProc` | ✅ **컨테이너에서 확인.** `scale_vaapi`가 여기서 돌고, `tonemap_vaapi`(Q18) 후보의 전제 |
+
+**컨테이너 드라이버가 호스트보다 신형이다** — 호스트 iHD 22.3.1 / VA-API 1.14 대 컨테이너
+**iHD 23.1.1 / VA-API 1.17**. bookworm이 Ubuntu 22.04보다 최신 media-driver를 담고 있다.
+따라서 **가속 동작은 컨테이너 안에서 확인해야 한다**(`make vainfo`). 호스트 결과와 다를 수 있다.
 
 **HEVC 디코드와 H.264 인코드가 모두 하드웨어로 처리된다. CPU가 담당하는 건 톤매핑뿐이다.**
 
@@ -1206,7 +1211,7 @@ HEVC라도 그대로 두고, 재생이 안 되는 브라우저에서는 정지�
 
 | 단계 | 내용 | 완료 기준 |
 |---|---|---|
-| **M0** | 저장소·Docker Compose·CI 골격, 헬스체크 | `docker compose up` 으로 전 스택 기동 |
+| ~~**M0**~~ | 저장소·Docker Compose 골격, 헬스체크 | ✅ **완료** — 전 스택 기동, readyz 통과 |
 | **M1** | **드롭 폴더 인제스트**(SFTP + 주기 스캔) + HEIC→display.jpg + 썸네일 (UI 없음) | 폴더에 던져 넣으면 DB·파생물이 생기고 `incoming/`이 비워진다 |
 | **M2** | 인증 + 타임라인 그리드 + 라이트박스 | 로그인 후 아이폰 사진을 브라우저에서 본다 |
 | **M3** | 동영상 (HEVC HLS 트랜스코딩 + **Dolby Vision 톤매핑**) + HW 가속 | 아이폰 4K 영상이 색 왜곡 없이 재생된다 |
