@@ -1,0 +1,66 @@
+# poogiegram — 호스트 nginx 서버블록 (§3.2)
+#
+# 설치:
+#   sudo cp poogiegram.conf.example /etc/nginx/sites-available/poogiegram.conf
+#   sudo ln -s /etc/nginx/sites-available/poogiegram.conf /etc/nginx/sites-enabled/
+#   sudo certbot --nginx -d poogiegram.example.com
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# nginx -t 를 반드시 먼저 돌린다. 설정 오류로 nginx 가 죽으면 기존 사이트까지 함께 내려간다.
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name poogiegram.example.com;   # ← 실제 도메인으로 교체 (Q17)
+
+    # ssl_certificate / ssl_certificate_key 는 certbot 이 채운다
+
+    # 청크 업로드 단위 기준. 원본 파일 크기가 아니라 청크 크기다 (§6.6).
+    client_max_body_size 64m;
+
+    # ── 애플리케이션 ────────────────────────────────────────────────────
+    location / {
+        proxy_pass http://127.0.0.1:8005;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 대용량 업로드가 중간에 끊기지 않도록
+        proxy_request_buffering off;
+        proxy_read_timeout 300s;
+    }
+
+    # ── X-Accel-Redirect 내부 경로 (§3.2) ───────────────────────────────
+    #
+    # `internal` 이 핵심이다. 브라우저가 이 경로로 직접 요청하면 404 가 되고,
+    # FastAPI 가 권한 검사를 마친 뒤 X-Accel-Redirect 헤더로 지시했을 때만 서빙된다.
+    # 권한 검사를 우회할 방법이 없다.
+    #
+    # 바이트 전송을 nginx 가 맡는 이유: Python 이 4K 영상을 스트리밍하면 워커가
+    # 오래 점유되어 API 응답 전체가 밀린다 (§3).
+
+    location /_media/ {
+        internal;
+        alias /mnt/media/;
+        add_header Cache-Control "private, max-age=31536000, immutable";
+    }
+
+    location /_derived/ {
+        internal;
+        alias /var/lib/poogiegram/derived/;
+        add_header Cache-Control "private, max-age=31536000, immutable";
+    }
+
+    access_log /var/log/nginx/poogiegram.access.log;
+    error_log  /var/log/nginx/poogiegram.error.log;
+}
+
+# HTTP → HTTPS (certbot 이 자동 생성하기도 한다. 중복되면 이 블록을 지운다)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name poogiegram.example.com;
+    return 301 https://$host$request_uri;
+}

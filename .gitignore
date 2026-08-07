@@ -1,0 +1,41 @@
+# 환경 설정 — .env.example 만 커밋한다
+.env
+.env.*
+!.env.example
+
+# 실제 환경 값(호스트명·계정·디스크 UUID·다른 서비스 포트·외부 노출 계획).
+# 공개 저장소에는 설계와 근거만 남긴다.
+*.local.md
+docs/*.local.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / 프런트엔드
+node_modules/
+web/dist/
+web/.vite/
+
+# 로컬 작업물
+*.log
+.DS_Store
+scratch/
+
+# 미디어는 절대 커밋하지 않는다 (§4 — 원본은 /mnt/media 에만 존재)
+*.heic
+*.HEIC
+*.jpg
+*.jpeg
+*.png
+*.mov
+*.MOV
+*.mp4
+!web/public/**
+!docs/**/*.png

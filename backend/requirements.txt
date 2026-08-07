@@ -1,0 +1,16 @@
+# M0 시점에는 하한만 지정한다. 첫 빌드가 성공하면 pip freeze 로 잠글 것 (CLAUDE.md 참조).
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2.6
+
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.30
+alembic>=1.14
+
+arq>=0.26
+redis>=5.2
+
+pillow>=11.0
+pillow-heif>=0.20
+python-multipart>=0.0.12

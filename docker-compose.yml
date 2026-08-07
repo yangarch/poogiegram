@@ -1,0 +1,72 @@
+name: poogiegram
+
+x-backend: &backend
+  build:
+    context: ./backend
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379/0
+    MEDIA_ROOT: /data/media
+    DERIVED_ROOT: /data/derived
+  volumes:
+    - ${MEDIA_ROOT}:/data/media
+    - ${DERIVED_ROOT}:/data/derived
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *backend
+    command: uvicorn poogiegram.main:app --host 0.0.0.0 --port 8005
+    # 호스트에는 루프백으로만 바인딩한다. 외부 노출은 호스트 nginx 담당 (§3).
+    ports:
+      - "127.0.0.1:${API_PORT:-8005}:8005"
+    healthcheck:
+      test: ["CMD", "python", "-m", "poogiegram.healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  worker:
+    <<: *backend
+    command: arq poogiegram.worker.WorkerSettings
+    # GPU 접근은 docker-compose.vaapi.yml 오버레이에서 주입한다 (§6.4).
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # ports 없음 — 내부 네트워크 전용 (§3.1)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    # ports 없음 — 내부 네트워크 전용 (§3.1)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
