@@ -67,8 +67,18 @@ check-gid: ## .env 의 GID 가 호스트 그룹과 맞는지 확인
 	echo "GID 확인: poogiegram=$$POOGIEGRAM_GID render=$${RENDER_GID:-(GPU 없음)}"
 
 fix-perms: ## 파생물 권한을 그룹 읽기 가능하게 되돌린다 (nginx 가 못 읽을 때)
-	sudo chmod -R g+rX $${DERIVED_ROOT:-/var/lib/poogiegram/derived}
+	@# g+s 로 setgid 를 되살린다. 이게 없으면 새로 만드는 파일이 poogiegram 이 아니라
+	@# 컨테이너 주 그룹(app)으로 생겨서, 권한을 고쳐도 다음 파생물부터 다시 안 보인다.
+	sudo find $${DERIVED_ROOT:-/var/lib/poogiegram/derived} -type d -exec chmod g+rxs {} +
+	sudo find $${DERIVED_ROOT:-/var/lib/poogiegram/derived} -type f -exec chmod g+r {} +
+	sudo chgrp -R $${POOGIEGRAM_GROUP:-poogiegram} $${DERIVED_ROOT:-/var/lib/poogiegram/derived}
 	@echo "완료. nginx 를 재시작하면 반영됩니다:  sudo systemctl restart nginx"
+
+test: ## 테스트 실행 (K=키워드 로 한정 가능)
+	@# 운영 이미지에는 tests/ 도 pytest 도 넣지 않는다 (Dockerfile 은 앱만 COPY).
+	@# 소스를 마운트하고 테스트 의존성은 임시 컨테이너 안에서만 설치한다.
+	$(DC) run --rm --no-deps -T -v "$(CURDIR)/backend:/src" -w /src api sh -c \
+		"pip install -q --user -r requirements-dev.txt && python -m pytest -q $(if $(K),-k '$(K)',)"
 
 retry-derive: ## 실패한 파생물을 다시 시도 (원인을 고친 뒤 실행)
 	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} \
@@ -116,4 +126,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status check-gid fix-perms retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump
+.PHONY: help up down logs ps status check-gid fix-perms test retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump

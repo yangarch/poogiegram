@@ -71,8 +71,18 @@ if [ -n "$sample" ]; then
     if as_www test -r "$sample"; then
         ok "www-data 가 파생물을 읽을 수 있음"
     else
+        # a+rX 로 열지 않는다 — 서버의 다른 사용자·서비스까지 사진을 읽게 된다 (§3.3).
+        # www-data 는 poogiegram 그룹에 속하므로 그룹 읽기만 열면 충분하다.
         die "www-data 가 $sample 을 읽지 못합니다. nginx 가 사진을 서빙할 수 없습니다.
-       sudo chmod -R a+rX $DERIVED_ROOT $MEDIA_ROOT/originals"
+
+       원인을 먼저 확인하세요 (상위 디렉터리 권한까지 한 번에 보입니다):
+         namei -om $sample
+
+       파일이 0600 이면 (권한 수정 이전에 만들어진 파생물):
+         make fix-perms
+
+       그룹이 $GROUP_NAME 이 아니면:
+         sudo chgrp -R $GROUP_NAME $DERIVED_ROOT && make fix-perms"
     fi
 else
     warn "파생물이 아직 없어 읽기 권한을 확인하지 못했습니다."

@@ -123,3 +123,42 @@ def test_파생물이_그룹에서_읽을_수_있다(tmp_path):
         assert mode & stat.S_IRGRP, f"{f} 를 그룹이 읽을 수 없다 (mode {oct(mode)})"
 
     assert stat.S_IMODE(d.stat().st_mode) & stat.S_IXGRP, "디렉터리에 그룹 진입 권한이 없다"
+
+
+def test_디렉터리에_setgid가_남는다(tmp_path):
+    """setgid 가 없으면 파일이 poogiegram 그룹을 물려받지 못한다.
+
+    컨테이너 프로세스의 주 그룹은 app 이고 poogiegram 은 보조 그룹이다.
+    setgid 디렉터리 안에서 만든 파일만 부모의 그룹을 따라간다 — 이 비트가 빠지면
+    파일이 0640 이어도 그룹이 app 이라 nginx 가 읽지 못한다.
+
+    chmod 는 넘긴 모드를 그대로 쓰므로, 모드에서 2000 을 빠뜨리면 상위에서
+    물려받은 setgid 까지 **지워버린다.** 실수하기 쉬운 지점이라 고정해둔다.
+    """
+    import stat
+
+    src = _jpeg(tmp_path / "a.jpg")
+    out = tmp_path / "derived"
+    generate(src, SHA, "image", out)
+
+    d = derived_dir(out, SHA)
+    # 해시 단계 디렉터리까지 전부 확인한다 — 중간에서 끊기면 그 아래가 함께 무너진다
+    for path in (out / SHA[:2], out / SHA[:2] / SHA[2:4], d):
+        assert stat.S_IMODE(path.stat().st_mode) & stat.S_ISGID, (
+            f"{path.name} 에 setgid 가 없다 — 파일이 app 그룹으로 생겨 nginx 가 못 읽는다"
+        )
+
+
+def test_setgid없이_있던_디렉터리도_복구된다(tmp_path):
+    """권한 수정 이전 배포에서 만들어진 디렉터리가 그대로 남아 있을 수 있다."""
+    import stat
+
+    out = tmp_path / "derived"
+    stale = derived_dir(out, SHA)
+    stale.mkdir(parents=True)
+    stale.chmod(0o700)
+
+    generate(_jpeg(tmp_path / "a.jpg"), SHA, "image", out)
+
+    assert stat.S_IMODE(stale.stat().st_mode) & stat.S_ISGID
+    assert stat.S_IMODE(stale.stat().st_mode) & stat.S_IXGRP

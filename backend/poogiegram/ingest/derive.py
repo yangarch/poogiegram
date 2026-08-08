@@ -38,7 +38,14 @@ FFMPEG_TIMEOUT = 120
 # 그룹(poogiegram)에 읽기를 열어 nginx 가 X-Accel-Redirect 로 서빙할 수 있게 한다.
 # world-readable 로 열지 않는 이유는 §3.3 참조.
 DERIVED_FILE_MODE = 0o640
-DERIVED_DIR_MODE = 0o750
+
+# setgid(2000)가 핵심이다. 컨테이너 프로세스의 주 그룹은 poogiegram 이 아니라 app 이고
+# (Dockerfile 의 useradd), poogiegram 은 group_add 로 붙인 보조 그룹일 뿐이다.
+# setgid 디렉터리 안에서 만든 파일만 부모의 그룹(poogiegram)을 물려받는다.
+# 이 비트를 빼면 파일 그룹이 app 이 되어, 0640 이어도 nginx 가 읽지 못한다.
+#
+# chmod 는 넘긴 모드를 그대로 적용하므로 2000 을 빼면 **기존 setgid 도 지워진다.**
+DERIVED_DIR_MODE = 0o2750
 
 
 class DeriveError(RuntimeError):
