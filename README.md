@@ -98,14 +98,22 @@ sudo ./deploy/setup-sftp.sh          # 계정명 기본값 poogiedrop
 고칠 명령과 함께 멈춘다. 여러 번 실행해도 안전하다.
 **sshd 재적용은 기존 SSH 세션을 열어둔 채로** 하는 것을 권한다.
 
-**6. nginx (외부 접속이 필요할 때)**
+**6. nginx + TLS (외부 접속이 필요할 때)**
 
 ```bash
-sudo cp deploy/nginx/poogiegram.conf.example /etc/nginx/sites-available/poogiegram.conf
-# server_name 을 실제 도메인으로 수정
-sudo ln -s /etc/nginx/sites-available/poogiegram.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+sudo ./deploy/setup-nginx.sh poogiegram.example.com
 ```
+
+기존 nginx 를 재사용한다. 설정이 잘못되면 **기존 사이트까지 함께 내려가므로**
+스크립트가 먼저 점검하고 `nginx -t` 통과 후에만 적용한다:
+
+- 기존 nginx 설정이 이미 정상인지
+- 앱이 `127.0.0.1:8005` 에서 응답하는지 (아니면 502 만 보게 된다)
+- DNS 가 이 서버를 가리키는지 (certbot 의 HTTP-01 인증 조건)
+- **`www-data` 가 미디어 파일을 읽을 수 있는지** — 아니면 화면은 뜨는데 사진만 안 보인다
+
+TLS 는 certbot 이 붙인다. 끝나면 `.env` 의 `COOKIE_SECURE=true` 로 바꾸고 `make up`.
+HTTP 로 접속하는 동안 `true` 면 브라우저가 쿠키를 저장하지 않아 로그인이 계속 풀린다.
 
 ## 개발
 
