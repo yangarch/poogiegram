@@ -11,6 +11,7 @@ ContentIdentifier 를 써넣지 못한다.** 그래서 메타데이터 추출은
 import datetime as dt
 import os
 import uuid
+from urllib.parse import urlsplit
 
 import pytest
 import pytest_asyncio
@@ -21,7 +22,32 @@ from poogiegram.ingest.pipeline import _pair_live_photo
 from poogiegram.models import Asset
 
 DB_URL = os.environ.get("DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DB_URL, reason="DATABASE_URL 미설정")
+
+# **이 파일은 asset 테이블을 통째로 비운다.** 운영 DB 를 가리킨 채 돌리면 사진이
+# 전부 사라진다. 실제로 그렇게 날렸다 — make test 가 앱 컨테이너에서 돌면서
+# 운영 DATABASE_URL 을 그대로 물려받았고, 자산 행이 지워졌다.
+# (원본 파일은 남아 있어 cli reindex 로 복구했다.)
+#
+# 그래서 DB 이름으로 한 번 더 막는다. Makefile 이 실수로 되돌아가도 여기서 걸린다.
+_TEST_DB_SUFFIX = "_test"
+
+
+def _is_test_db(url: str) -> bool:
+    """DB 이름이 _test 로 끝나야 파괴적 테스트를 허용한다."""
+    name = urlsplit(url).path.lstrip("/").split("?")[0]
+    return name.endswith(_TEST_DB_SUFFIX)
+
+
+pytestmark = [
+    pytest.mark.skipif(not DB_URL, reason="DATABASE_URL 미설정"),
+    pytest.mark.skipif(
+        bool(DB_URL) and not _is_test_db(DB_URL),
+        reason=(
+            "DATABASE_URL 이 테스트용 DB 가 아닙니다. 이 테스트는 asset 테이블을 비웁니다 — "
+            f"DB 이름이 '{_TEST_DB_SUFFIX}' 로 끝나야 실행합니다. (make test-db)"
+        ),
+    ),
+]
 
 CID = "0191DCC6-51E8-452F-9829-3F21FE2E39EA"
 

@@ -112,6 +112,30 @@ async def list_users() -> int:
     return await _with_session(run)
 
 
+async def reindex() -> int:
+    """originals/ 를 훑어 DB 에 없는 파일을 등록한다 (§4.1).
+
+    DB 만 잃고 원본이 남은 상황의 복구 수단이다. 파일은 옮기지 않는다.
+    """
+    from .ingest.pipeline import reindex_all
+
+    settings = get_settings()
+    engine = make_engine(settings.database_url)
+    try:
+        maker = make_sessionmaker(engine)
+        counts = await reindex_all(maker, settings)
+    finally:
+        await engine.dispose()
+
+    if not counts:
+        print("originals/ 에 파일이 없습니다.")
+        return 0
+    for status, n in sorted(counts.items()):
+        print(f"  {status:<10} {n}")
+    print("\n파생물은 워커가 만듭니다. 진행 상황:  make status-derive")
+    return 1 if counts.get("failed") else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="poogiegram.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -125,12 +149,15 @@ def main() -> int:
     p.add_argument("email")
 
     sub.add_parser("list-users", help="계정 목록")
+    sub.add_parser("reindex", help="originals/ 를 훑어 DB 에 없는 파일을 등록 (복구용)")
 
     args = parser.parse_args()
     if args.command == "create-user":
         return asyncio.run(create_user(args.email, args.name, args.admin))
     if args.command == "passwd":
         return asyncio.run(change_password(args.email))
+    if args.command == "reindex":
+        return asyncio.run(reindex())
     return asyncio.run(list_users())
 
 

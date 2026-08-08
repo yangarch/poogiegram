@@ -207,6 +207,50 @@ async def repair_pairings(session) -> int:
     return len(unmarked) + len(orphans)
 
 
+def _build_asset(
+    src: Path,
+    name: str,
+    rel: str,
+    digest: str,
+    meta,
+    local: dt.datetime,
+    offset: int | None,
+    source: str,
+) -> Asset:
+    """추출한 메타데이터로 Asset 행을 만든다.
+
+    인제스트(drop/ 에서 들어옴)와 재색인(originals/ 에 이미 있음)이 같은 값을
+    넣어야 한다. 한쪽에만 컬럼을 추가하면 재색인으로 복구한 자산이 조용히
+    반쪽짜리가 된다.
+    """
+    return Asset(
+        sha256=digest,
+        path=rel,
+        original_filename=name,
+        kind=meta.kind,
+        mime=meta.mime,
+        bytes=src.stat().st_size,
+        width=meta.width,
+        height=meta.height,
+        duration_ms=meta.duration_ms,
+        taken_local=local,
+        taken_at=dates.to_utc(local, offset),
+        tz_offset=offset,
+        date_source=source,
+        lat=meta.lat,
+        lon=meta.lon,
+        camera=meta.camera,
+        exif=meta.raw,
+        codec=meta.codec,
+        content_id=meta.content_id,
+        is_screenshot=meta.is_screenshot,
+        # HEIC 는 크롬·파이어폭스에서 표시되지 않아 display.jpg 가 필수다 (§6.2)
+        needs_display_copy=(meta.mime == "image/heic"),
+        derive_status="pending",
+        video_status=("needs_transcode" if meta.kind == "video" else None),
+    )
+
+
 async def ingest_file(session, settings: Settings, src: Path) -> Result:
     """파일 하나를 인제스트한다. 예외를 던지지 않고 Result 로 돌려준다."""
     name = src.name
@@ -245,32 +289,7 @@ async def ingest_file(session, settings: Settings, src: Path) -> Result:
     local, offset, source = dates.resolve(meta.tags, src, meta.kind)
     rel = target_path(local, source, name, digest)
 
-    asset = Asset(
-        sha256=digest,
-        path=rel,
-        original_filename=name,
-        kind=meta.kind,
-        mime=meta.mime,
-        bytes=src.stat().st_size,
-        width=meta.width,
-        height=meta.height,
-        duration_ms=meta.duration_ms,
-        taken_local=local,
-        taken_at=dates.to_utc(local, offset),
-        tz_offset=offset,
-        date_source=source,
-        lat=meta.lat,
-        lon=meta.lon,
-        camera=meta.camera,
-        exif=meta.raw,
-        codec=meta.codec,
-        content_id=meta.content_id,
-        is_screenshot=meta.is_screenshot,
-        # HEIC 는 크롬·파이어폭스에서 표시되지 않아 display.jpg 가 필수다 (§6.2)
-        needs_display_copy=(meta.mime == "image/heic"),
-        derive_status="pending",
-        video_status=("needs_transcode" if meta.kind == "video" else None),
-    )
+    asset = _build_asset(src, name, rel, digest, meta, local, offset, source)
 
     # DB 행을 먼저 만들어 sha256 경합을 DB 제약으로 처리한다.
     session.add(asset)
@@ -320,3 +339,70 @@ async def ingest_one(sessionmaker, settings: Settings, src: Path) -> Result:
     except Exception:  # noqa: BLE001 — 격리는 이미 끝났다. 기록 실패로 죽이지 않는다
         log.exception("실패 기록을 남기지 못함: %s", src.name)
     return Result("failed", detail=detail)
+
+
+async def reindex_file(session, settings: Settings, src: Path) -> Result:
+    """originals/ 에 이미 있는 파일을 DB 에 등록한다. **파일을 옮기지 않는다.**
+
+    DB 를 잃어도 원본만 있으면 복구할 수 있어야 한다 (§4.1). 파일명에 날짜와
+    해시가 들어 있는 것도 그 때문인데, 정작 그걸 실행할 수단이 없었다.
+
+    경로를 다시 계산하지 않고 지금 있는 자리를 그대로 쓴다. target_path 로 다시
+    만들면 이미 붙어 있는 해시 접미사 위에 또 붙어 파일명이 바뀐다.
+    """
+    rel = str(src.relative_to(settings.originals_dir))
+    name = src.name
+
+    try:
+        digest = sha256_of(src)
+    except OSError as exc:
+        raise FileProblem(f"읽을 수 없음: {exc}") from exc
+
+    existing = await session.scalar(select(Asset).where(Asset.sha256 == digest))
+    if existing is not None:
+        return Result("duplicate", str(existing.id), "이미 등록됨")
+
+    try:
+        meta = metadata.extract(src)
+    except metadata.MetadataError as exc:
+        raise FileProblem(str(exc)) from exc
+
+    local, offset, source = dates.resolve(meta.tags, src, meta.kind)
+    asset = _build_asset(src, name, rel, digest, meta, local, offset, source)
+
+    session.add(asset)
+    await session.flush()
+    await _pair_live_photo(session, asset)
+
+    return Result("reindexed", str(asset.id), rel)
+
+
+async def reindex_all(sessionmaker, settings: Settings) -> dict[str, int]:
+    """originals/ 전체를 훑어 DB 에 없는 파일을 등록한다.
+
+    이미 등록된 파일은 건너뛰므로 여러 번 돌려도 안전하다.
+    """
+    counts: dict[str, int] = {}
+    marker = ".poogiegram-ok"
+
+    for path in sorted(settings.originals_dir.rglob("*")):
+        if not path.is_file() or path.name == marker or path.name.startswith("."):
+            continue
+        async with sessionmaker() as session:
+            async with session.begin():
+                try:
+                    result = await reindex_file(session, settings, path)
+                    status = result.status
+                except FileProblem as exc:
+                    log.warning("재색인 실패 %s — %s", path.name, exc)
+                    status = "failed"
+        counts[status] = counts.get(status, 0) + 1
+
+    # 동시 인제스트로 놓친 라이브 포토 짝을 맞춘다 (§6.5)
+    async with sessionmaker() as session:
+        async with session.begin():
+            paired = await repair_pairings(session)
+    if paired:
+        counts["paired"] = paired
+
+    return counts

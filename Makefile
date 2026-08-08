@@ -77,11 +77,30 @@ fix-perms: ## 파생물 권한을 그룹 읽기 가능하게 되돌린다 (nginx
 	sudo chgrp -R $${POOGIEGRAM_GROUP:-poogiegram} $${DERIVED_ROOT:-/var/lib/poogiegram/derived}
 	@echo "완료. nginx 를 재시작하면 반영됩니다:  sudo systemctl restart nginx"
 
-test: ## 테스트 실행 (K=키워드 로 한정 가능)
+test: ## 테스트 실행 (K=키워드 로 한정 가능). DB 테스트는 건너뛴다
 	@# 운영 이미지에는 tests/ 도 pytest 도 넣지 않는다 (Dockerfile 은 앱만 COPY).
 	@# 소스를 마운트하고 테스트 의존성은 임시 컨테이너 안에서만 설치한다.
-	$(DC) run --rm --no-deps -T -v "$(CURDIR)/backend:/src" -w /src api sh -c \
+	@#
+	@# **DATABASE_URL 을 비우는 것이 핵심이다.** 앱 컨테이너에서 돌므로 그냥 두면
+	@# 운영 DB 를 물려받는데, DB 테스트는 asset 테이블을 통째로 비운다.
+	@# 실제로 이걸 빠뜨려 사진 행이 전부 지워졌다. DB 테스트는 make test-db 로.
+	$(DC) run --rm --no-deps -T -e DATABASE_URL= -v "$(CURDIR)/backend:/src" -w /src api sh -c \
 		"pip install -q --user -r requirements-dev.txt && python -m pytest -q -o cache_dir=/tmp/pytest_cache $(if $(K),-k '$(K)',)"
+
+test-db: ## DB 가 필요한 테스트까지 실행 (전용 테스트 DB 를 새로 만든다)
+	@set -e; \
+	run() { $(DC) run --rm --no-deps -T -v "$(CURDIR)/backend:/src" -w /src api "$$@"; }; \
+	name=$$(run python tests/testdb.py --name | tr -d '\r'); \
+	echo "테스트 DB: $$name (운영 DB 는 건드리지 않습니다)"; \
+	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d postgres -c "DROP DATABASE IF EXISTS $$name" >/dev/null; \
+	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d postgres -c "CREATE DATABASE $$name" >/dev/null; \
+	run sh -c 'export DATABASE_URL=$$(python tests/testdb.py) \
+		&& pip install -q --user -r requirements-dev.txt \
+		&& alembic upgrade head >/dev/null \
+		&& python -m pytest -q -o cache_dir=/tmp/pytest_cache'
+
+reindex: ## originals/ 를 훑어 DB 에 없는 파일을 등록한다 (DB 만 잃었을 때 복구)
+	$(DC) exec -T api python -m poogiegram.cli reindex
 
 retry-derive: ## 실패한 파생물을 다시 시도 (원인을 고친 뒤 실행)
 	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} \
@@ -129,4 +148,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs tail ps status check-gid fix-perms test retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump
+.PHONY: help up down logs tail ps status check-gid fix-perms test test-db reindex retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump
