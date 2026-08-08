@@ -34,8 +34,14 @@ async def _requeue_pending_derives(ctx) -> int:
     유실되면 자산이 pending 인 채로 영원히 남는다. HEIC 는 파생물이 없으면
     **화면에 아무것도 안 보이므로** 조용히 방치되면 안 된다.
 
-    job_id 를 자산 ID 로 고정해 중복 큐잉을 막는다.
+    job_id 에 시간 구간을 넣는 이유:
+    arq 는 같은 job_id 의 결과를 일정 시간 보관하고 그동안 재큐잉을 무시한다.
+    자산 ID 만으로 고정하면 중복은 막히지만 **재시도까지 함께 막혀**, 권한 문제를
+    고쳐도 복구되지 않는다. 스캔 주기로 구간을 나눠 한 사이클 안에서는 중복을
+    막고 다음 사이클에는 다시 시도되게 한다.
     """
+    import time
+
     from sqlalchemy import select
 
     from .models import Asset
@@ -49,8 +55,12 @@ async def _requeue_pending_derives(ctx) -> int:
             )
         ).all()
 
+    interval = max(ctx["settings"].ingest_scan_interval_seconds, 60)
+    bucket = int(time.time() // interval)
     for asset_id in stale:
-        await ctx["redis"].enqueue_job("derive_asset", str(asset_id), _job_id=f"derive:{asset_id}")
+        await ctx["redis"].enqueue_job(
+            "derive_asset", str(asset_id), _job_id=f"derive:{asset_id}:{bucket}"
+        )
     if stale:
         log.info("파생물 재큐잉: %d건", len(stale))
     return len(stale)
@@ -99,9 +109,7 @@ async def ingest_file(ctx, path_str: str) -> dict:
     # 파생물은 별도 작업으로 분리한다. 인제스트(빠름)와 디코딩(느림)을 한 작업에
     # 묶으면 큐가 디코딩에 막혀 새 파일이 DB 에 늦게 나타난다.
     if result.event in ("ingested", "restored") and result.asset_id:
-        await ctx["redis"].enqueue_job(
-            "derive_asset", result.asset_id, _job_id=f"derive:{result.asset_id}"
-        )
+        await ctx["redis"].enqueue_job("derive_asset", result.asset_id)
     return {"event": result.event, "asset_id": result.asset_id}
 
 
@@ -238,3 +246,5 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     # GPU 인코드 엔진이 하나뿐이라 무한정 늘려도 의미가 없다 (§6.3).
     max_jobs = get_settings().worker_concurrency
+    # 결과를 오래 들고 있을 이유가 없다. 상태는 DB(derive_status)가 갖는다.
+    keep_result = 300

@@ -69,7 +69,13 @@ check-gid: ## .env 의 GID 가 호스트 그룹과 맞는지 확인
 retry-derive: ## 실패한 파생물을 다시 시도 (원인을 고친 뒤 실행)
 	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} \
 		-c "UPDATE asset SET derive_status='pending' WHERE derive_status='failed' AND deleted_at IS NULL;"
+	@# arq 가 보관 중인 이전 결과를 지운다. 남아 있으면 같은 job_id 의 재큐잉이 무시된다.
+	@$(DC) exec -T redis sh -c "redis-cli --scan --pattern 'arq:result:derive:*' | xargs -r redis-cli del" >/dev/null 2>&1 || true
 	@curl -sXPOST http://127.0.0.1:$${API_PORT:-8005}/api/ingest/scan >/dev/null && echo "재시도 큐잉됨"
+
+status-derive: ## 파생물 상태 요약
+	@$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} -tAc \
+		"SELECT derive_status, count(*) FROM asset WHERE deleted_at IS NULL GROUP BY derive_status ORDER BY 1;"
 
 migrate: ## DB 마이그레이션 적용
 	$(DC) exec api alembic upgrade head
@@ -95,4 +101,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status check-gid retry-derive migrate migration shell psql vainfo dump
+.PHONY: help up down logs ps status check-gid retry-derive status-derive migrate migration shell psql vainfo dump
