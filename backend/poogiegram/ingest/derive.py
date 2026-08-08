@@ -63,13 +63,30 @@ def _ensure_dir(path: Path) -> None:
     """디렉터리를 만들고 그룹이 들어갈 수 있게 권한을 맞춘다.
 
     mkdir 의 mode 인자는 umask 에 깎이므로 만든 뒤 chmod 로 확정한다.
+
+    **새로 만든 디렉터리 전부**에 적용해야 한다. mkdir(parents=True) 로 생기는
+    중간 단계(해시 앞 2자리·4자리)를 빼먹으면 그 디렉터리는 umask 기본값이 되고,
+    setgid 가 없어 그 아래 파일이 poogiegram 그룹을 물려받지 못한다.
+    지금까지는 derived/ 루트의 setgid 가 아래로 전파돼 우연히 동작했을 뿐이라,
+    루트의 비트 하나만 빠져도 조용히 무너지는 상태였다.
+
+    이미 있던 디렉터리는 건드리지 않는다 — derived/ 루트나 그 위의 권한을
+    우리가 바꿀 이유가 없다.
     """
+    created: list[Path] = []
+    probe = path
+    while not probe.exists():
+        created.append(probe)
+        probe = probe.parent
+
     path.mkdir(parents=True, exist_ok=True)
-    try:
-        path.chmod(DERIVED_DIR_MODE)
-    except PermissionError:
-        # 다른 소유자가 이미 만들어 둔 경우. 접근만 되면 문제없다.
-        pass
+
+    for directory in reversed(created):
+        try:
+            directory.chmod(DERIVED_DIR_MODE)
+        except (PermissionError, FileNotFoundError):
+            # 경쟁 상태로 다른 프로세스가 먼저 만들었을 수 있다. 접근만 되면 문제없다.
+            pass
 
 
 def derived_dir(root: Path, sha256: str) -> Path:

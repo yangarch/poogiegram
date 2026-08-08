@@ -78,7 +78,7 @@ test: ## 테스트 실행 (K=키워드 로 한정 가능)
 	@# 운영 이미지에는 tests/ 도 pytest 도 넣지 않는다 (Dockerfile 은 앱만 COPY).
 	@# 소스를 마운트하고 테스트 의존성은 임시 컨테이너 안에서만 설치한다.
 	$(DC) run --rm --no-deps -T -v "$(CURDIR)/backend:/src" -w /src api sh -c \
-		"pip install -q --user -r requirements-dev.txt && python -m pytest -q $(if $(K),-k '$(K)',)"
+		"pip install -q --user -r requirements-dev.txt && python -m pytest -q -o cache_dir=/tmp/pytest_cache $(if $(K),-k '$(K)',)"
 
 retry-derive: ## 실패한 파생물을 다시 시도 (원인을 고친 뒤 실행)
 	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} \

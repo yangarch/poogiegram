@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from pathlib import Path
@@ -58,7 +59,11 @@ app.include_router(auth_router)
 app.include_router(assets_router)
 app.include_router(ingest_router)
 
-_STATIC = Path(__file__).resolve().parent.parent / "static"
+# 프런트엔드 빌드 산출물 위치. 환경변수로 덮어쓸 수 있게 둔 이유는 테스트 때문이다 —
+# 라우트는 임포트 시점에 등록되므로, 검사하려면 static/ 이 있는 상태를 만들 수 있어야 한다.
+_STATIC = Path(
+    os.environ.get("STATIC_DIR") or Path(__file__).resolve().parent.parent / "static"
+)
 
 
 @app.get("/healthz")

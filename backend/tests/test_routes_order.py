@@ -12,30 +12,30 @@ static/ 을 **있는 상태로 만들고** 검사한다.
 """
 
 import importlib
-import shutil
-from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parent.parent
-STATIC = BACKEND / "static"
-
 
 @pytest.fixture
-def app_with_static():
-    """빌드 산출물이 있는 상태를 만든다. 이미 있으면 그대로 쓴다."""
-    created = not STATIC.is_dir()
-    if created:
-        (STATIC / "assets").mkdir(parents=True)
-        (STATIC / "index.html").write_text("<!doctype html><title>poogiegram</title>")
-    try:
-        # 모듈 로드 시점에 라우트가 등록되므로 다시 읽어야 한다
-        main = importlib.reload(importlib.import_module("poogiegram.main"))
-        assert main._STATIC.is_dir(), "픽스처가 static/ 을 만들지 못했다"
-        yield main.app
-    finally:
-        if created:
-            shutil.rmtree(STATIC)
+def app_with_static(tmp_path, monkeypatch):
+    """빌드 산출물이 있는 상태를 만든다.
+
+    소스 트리에 만들지 않는다 — 컨테이너에서 마운트해 돌릴 때 쓰기 권한이 없고,
+    테스트가 중간에 죽으면 static/ 이 남는다. STATIC_DIR 로 임시 경로를 가리킨다.
+    """
+    static = tmp_path / "static"
+    (static / "assets").mkdir(parents=True)
+    (static / "index.html").write_text("<!doctype html><title>poogiegram</title>")
+    monkeypatch.setenv("STATIC_DIR", str(static))
+
+    # 라우트는 임포트 시점에 등록되므로 다시 읽어야 한다
+    main = importlib.reload(importlib.import_module("poogiegram.main"))
+    assert main._STATIC.is_dir(), "픽스처가 static/ 을 만들지 못했다"
+    yield main.app
+
+    # 다음 테스트가 STATIC_DIR 없는 모듈을 보도록 되돌린다
+    monkeypatch.undo()
+    importlib.reload(main)
 
 
 def _paths(app) -> list[str]:
