@@ -15,6 +15,8 @@ from arq.connections import RedisSettings
 
 from . import logs
 from .config import get_settings
+from .db import make_engine, make_sessionmaker
+from .ingest.pipeline import ingest_one
 from .ingest.scanner import scan
 from .storage import ensure_runtime_dirs, verify_storage
 
@@ -39,13 +41,51 @@ async def scan_drop_folder(ctx) -> dict:
         if ready or waiting:
             log.info("스캔: 처리가능 %d, 대기 %d", len(ready), len(waiting))
         for c in ready:
-            # M1-3 에서 여기서 인제스트 작업을 큐에 넣는다.
-            log.info("  처리 대상: %s (%.1fMB)", c.path.name, c.size / 1e6)
+            await redis.enqueue_job("ingest_file", str(c.path))
         for c in waiting:
             log.debug("  대기(안정성 미충족): %s", c.path.name)
         return {"ready": len(ready), "waiting": len(waiting)}
     finally:
         await redis.delete(_SCAN_LOCK)
+
+
+async def ingest_file(ctx, path_str: str) -> dict:
+    """파일 하나를 인제스트한다 (§6.1).
+
+    파일 단위 작업으로 두는 이유는 **실패 격리**다. 500장 중 한 장이 깨져 있어도
+    나머지는 정상 처리되고, 깨진 것만 failed/ 로 간다.
+    """
+    from pathlib import Path
+
+    path = Path(path_str)
+    if not path.exists():
+        # 이전 사이클에서 이미 처리됐다. 스캔과 큐 사이의 정상적인 경합이다.
+        return {"skipped": "이미 처리됨"}
+
+    result = await ingest_one(ctx["sessionmaker"], ctx["settings"], path)
+    log.info("%s: %s %s", path.name, result.event, result.detail)
+    return {"event": result.event, "asset_id": result.asset_id}
+
+
+async def _wait_for_schema(ctx) -> None:
+    """마이그레이션이 적용될 때까지 기다린다.
+
+    신규 설치에서는 컨테이너가 먼저 뜨고 마이그레이션이 나중에 돈다. 그 사이에
+    스캔이 돌면 인제스트가 "relation does not exist" 로 실패하는데, 그 상태로
+    **drop/ 에 있던 파일이 전부 failed/ 로 격리된다.**
+    """
+    from sqlalchemy import text
+
+    delay = 2
+    while True:
+        try:
+            async with ctx["sessionmaker"]() as session:
+                await session.scalar(text("SELECT version_num FROM alembic_version"))
+            return
+        except Exception:  # noqa: BLE001
+            log.info("스키마 대기 중... (%d초 후 재시도)", delay)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 30)
 
 
 async def _scan_loop(ctx) -> None:
@@ -55,6 +95,7 @@ async def _scan_loop(ctx) -> None:
     inotify 이벤트 큐가 넘쳐 일부를 조용히 놓치는데, 오류도 로그도 남지 않는다.
     스캔은 놓치는 것이 없고, 최대 한 사이클만 늦어질 뿐이다 (§6.1).
     """
+    await _wait_for_schema(ctx)
     interval = ctx["settings"].ingest_scan_interval_seconds
     log.info("주기 스캔 시작 — %d초 간격", interval)
     while True:
@@ -75,6 +116,8 @@ async def startup(ctx) -> None:
     verify_storage(settings)
     ensure_runtime_dirs(settings)
     ctx["settings"] = settings
+    ctx["engine"] = make_engine(settings.database_url)
+    ctx["sessionmaker"] = make_sessionmaker(ctx["engine"])
     ctx["scan_task"] = asyncio.create_task(_scan_loop(ctx))
     log.info(
         "워커 기동 — hwaccel=%s concurrency=%d max_height=%d",
@@ -92,11 +135,13 @@ async def shutdown(ctx) -> None:
             await task
         except asyncio.CancelledError:
             pass
+    if engine := ctx.get("engine"):
+        await engine.dispose()
     log.info("워커 종료")
 
 
 class WorkerSettings:
-    functions = [scan_drop_folder]
+    functions = [scan_drop_folder, ingest_file]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
