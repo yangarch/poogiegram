@@ -25,7 +25,43 @@ def app_with_static(tmp_path):
 
 
 def _paths(app) -> list[str]:
-    return [r.path for r in app.routes if hasattr(r, "path")]
+    """등록 순서대로 경로를 펼친다.
+
+    include_router 로 넣은 라우트는 app.routes 에 평탄하게 들어가지 않는다.
+    _IncludedRouter 객체 하나로 묶여 들어가고 거기엔 .path 가 없다 — 순진하게
+    `hasattr(r, "path")` 로 거르면 API 라우트가 통째로 사라져 보인다.
+
+    중첩을 펼쳐도 순서는 그대로다. 묶음이 놓인 자리가 곧 그 라우트들의 매칭
+    우선순위이므로, 제자리에 펼치면 실제 매칭 순서와 일치한다.
+
+    Mount(/assets)는 펼치지 않는다 — 자체 경로로 매칭되는 하나의 단위다.
+    """
+    out: list[str] = []
+
+    def walk(routes) -> None:
+        for route in routes:
+            path = getattr(route, "path", None)
+            if path is not None:
+                out.append(path)
+                continue
+            # 묶음. 버전에 따라 .routes 또는 .router.routes 로 들고 있다.
+            nested = getattr(route, "routes", None)
+            if nested is None:
+                nested = getattr(getattr(route, "router", None), "routes", [])
+            walk(nested)
+
+    walk(app.routes)
+    return out
+
+
+def test_paths_헬퍼가_중첩_라우터를_펼친다(app_with_static):
+    """헬퍼가 틀리면 아래 순서 검사가 전부 조용히 무의미해진다.
+
+    실제로 include_router 로 넣은 라우트를 못 펼쳐서, 순서 검사가 검사하려던
+    대상을 놓친 채 실패했다.
+    """
+    paths = _paths(app_with_static)
+    assert "/api/auth/login" in paths, f"중첩 라우터를 펼치지 못했다: {paths}"
 
 
 def test_spa_폴백이_실제로_붙는다(app_with_static):
