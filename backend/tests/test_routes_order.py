@@ -1,4 +1,4 @@
-"""라우트 등록 순서 (§3).
+"""SPA 폴백이 API·헬스체크를 삼키지 않는지 (§3).
 
 SPA 폴백 `/{path:path}` 는 **모든 경로에 매칭된다.** FastAPI 는 등록 순서대로
 매칭하므로, 이 라우트가 먼저 등록되면 뒤에 정의된 라우트가 전부 삼켜진다.
@@ -7,101 +7,87 @@ SPA 폴백 `/{path:path}` 는 **모든 경로에 매칭된다.** FastAPI 는 등
 돌려주었고, 헬스체크가 JSON 파싱에 실패해 컨테이너가 unhealthy 로 떨어졌다.
 앱 로그에는 `GET /healthz 200 OK` 만 찍혀서 원인이 한눈에 보이지 않았다.
 
-static/ 이 없으면 폴백이 등록되지 않아 버그가 재현되지 않는다. 그래서 임시 경로에
-빌드 산출물 흉내를 내고 create_app 에 넘긴다.
+**응답을 검사한다.** 처음에는 app.routes 를 훑어 등록 순서를 봤는데, 이 버전의
+FastAPI 는 include_router 로 넣은 라우트를 _IncludedRouter 로 감싸 두어서 그 안이
+보이지 않았다. 내부 구조는 버전에 따라 바뀌지만 "헬스체크는 JSON 을 준다"는
+계약은 그대로다. 깨진 것도 그 계약이었다.
+
+lifespan 을 돌리지 않으므로 DB·Redis 가 없어도 된다 — TestClient 를 with 없이
+쓰면 기동 이벤트가 실행되지 않는다.
 """
 
+from types import SimpleNamespace
+
 import pytest
+from fastapi.testclient import TestClient
 
 from poogiegram.main import create_app
 
 
+def _client(app) -> TestClient:
+    # 인증 의존성이 상태를 먼저 건드린다. 빈 쿠키로 401 까지만 가면 되므로
+    # 최소한만 채운다 — 여기서 500 이 나면 "폴백에 안 삼켜졌다"는 신호가 흐려진다.
+    app.state.redis = None
+    app.state.settings = SimpleNamespace(session_ttl_seconds=0)
+    return TestClient(app, raise_server_exceptions=False)
+
+
 @pytest.fixture
-def app_with_static(tmp_path):
+def with_static(tmp_path):
+    """빌드 산출물이 있는 상태. 이때만 폴백이 붙는다."""
     static = tmp_path / "static"
     (static / "assets").mkdir(parents=True)
     (static / "index.html").write_text("<!doctype html><title>poogiegram</title>")
-    return create_app(static_dir=static)
+    return _client(create_app(static_dir=static))
 
 
-def _paths(app) -> list[str]:
-    """등록 순서대로 경로를 펼친다.
-
-    include_router 로 넣은 라우트는 app.routes 에 평탄하게 들어가지 않는다.
-    _IncludedRouter 객체 하나로 묶여 들어가고 거기엔 .path 가 없다 — 순진하게
-    `hasattr(r, "path")` 로 거르면 API 라우트가 통째로 사라져 보인다.
-
-    중첩을 펼쳐도 순서는 그대로다. 묶음이 놓인 자리가 곧 그 라우트들의 매칭
-    우선순위이므로, 제자리에 펼치면 실제 매칭 순서와 일치한다.
-
-    Mount(/assets)는 펼치지 않는다 — 자체 경로로 매칭되는 하나의 단위다.
-    """
-    out: list[str] = []
-
-    def walk(routes) -> None:
-        for route in routes:
-            path = getattr(route, "path", None)
-            if path is not None:
-                out.append(path)
-                continue
-            # 묶음. 버전에 따라 .routes 또는 .router.routes 로 들고 있다.
-            nested = getattr(route, "routes", None)
-            if nested is None:
-                nested = getattr(getattr(route, "router", None), "routes", [])
-            walk(nested)
-
-    walk(app.routes)
-    return out
+@pytest.fixture
+def without_static(tmp_path):
+    """개발 모드. Vite 가 프런트를 담당하고 앱은 API 만 낸다."""
+    return _client(create_app(static_dir=tmp_path / "없음"))
 
 
-def test_paths_헬퍼가_중첩_라우터를_펼친다(app_with_static):
-    """헬퍼가 틀리면 아래 순서 검사가 전부 조용히 무의미해진다.
-
-    실제로 include_router 로 넣은 라우트를 못 펼쳐서, 순서 검사가 검사하려던
-    대상을 놓친 채 실패했다.
-    """
-    paths = _paths(app_with_static)
-    assert "/api/auth/login" in paths, f"중첩 라우터를 펼치지 못했다: {paths}"
-
-
-def test_spa_폴백이_실제로_붙는다(app_with_static):
+def test_spa_폴백이_실제로_붙는다(with_static):
     """폴백이 없으면 아래 테스트들이 전부 무의미하게 통과한다."""
-    assert "/{path:path}" in _paths(app_with_static)
+    res = with_static.get("/타임라인/2024")
+    assert res.status_code == 200
+    assert "text/html" in res.headers["content-type"]
 
 
-def test_헬스체크가_폴백보다_먼저_등록된다(app_with_static):
-    paths = _paths(app_with_static)
-    fallback = paths.index("/{path:path}")
-
-    for endpoint in ("/healthz", "/readyz"):
-        assert endpoint in paths, f"{endpoint} 가 등록되지 않았다"
-        assert paths.index(endpoint) < fallback, (
-            f"{endpoint} 가 SPA 폴백보다 뒤에 등록됐다 — 폴백이 삼켜서 index.html 이 돌아간다"
-        )
+def test_healthz는_json을_돌려준다(with_static):
+    """이게 깨져서 컨테이너가 unhealthy 로 떨어졌다."""
+    res = with_static.get("/healthz")
+    assert res.status_code == 200, res.text
+    assert res.json() == {"status": "ok"}
 
 
-def test_api_라우트가_폴백보다_먼저_등록된다(app_with_static):
-    paths = _paths(app_with_static)
-    fallback = paths.index("/{path:path}")
-    api = [p for p in paths if p.startswith("/api/")]
+def test_readyz는_html이_아니다(with_static):
+    """의존성이 없어 내용은 실패하지만, index.html 이 돌아오면 안 된다.
 
-    assert api, f"API 라우트가 하나도 없다. 등록된 경로: {paths}"
-    for path in api:
-        assert paths.index(path) < fallback, f"{path} 가 SPA 폴백에 가려진다"
-
-
-def test_폴백이_맨_마지막이다(app_with_static):
-    """앞으로 추가되는 라우트도 폴백보다 앞서야 한다."""
-    paths = _paths(app_with_static)
-    tail = paths[paths.index("/{path:path}") + 1:]
-    assert not tail, f"SPA 폴백 뒤에 라우트가 있다 — 가려진다: {tail}"
+    lifespan 을 돌리지 않아 app.state 가 비어 있으므로 500 이 정상이다.
+    확인하려는 것은 상태 코드가 아니라 **폴백에 삼켜지지 않았다는 사실**이다.
+    """
+    res = with_static.get("/readyz")
+    assert "text/html" not in res.headers.get("content-type", ""), "폴백이 삼켰다"
 
 
-def test_static이_없으면_폴백을_붙이지_않는다(tmp_path):
-    """개발 중에는 Vite 가 담당한다. 이때도 API 는 정상이어야 한다."""
-    app = create_app(static_dir=tmp_path / "없음")
-    paths = _paths(app)
+def test_api는_폴백에_삼켜지지_않는다(with_static):
+    """인증이 걸린 API 는 401 이어야 한다. 200 + HTML 이면 폴백이 가로챈 것이다."""
+    res = with_static.get("/api/assets")
+    assert res.status_code == 401, res.text
 
-    assert "/{path:path}" not in paths
-    assert "/healthz" in paths
-    assert any(p.startswith("/api/") for p in paths), f"등록된 경로: {paths}"
+
+def test_없는_api는_404다(with_static):
+    """index.html 이 200 으로 돌아가면 디버깅이 헷갈린다."""
+    res = with_static.get("/api/없는경로")
+    assert res.status_code == 404
+    assert "text/html" not in res.headers.get("content-type", "")
+
+
+def test_static이_없어도_api는_동작한다(without_static):
+    assert without_static.get("/healthz").json() == {"status": "ok"}
+    assert without_static.get("/api/assets").status_code == 401
+
+
+def test_static이_없으면_폴백을_붙이지_않는다(without_static):
+    assert without_static.get("/타임라인/2024").status_code == 404
