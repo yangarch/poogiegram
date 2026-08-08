@@ -18,6 +18,11 @@ class Settings(BaseSettings):
 
     secret_key: str = "change-me"
 
+    # 세션 (§8). 슬라이딩 만료라 쓰는 동안은 유지된다.
+    session_ttl_days: int = 30
+    # HTTPS 뒤에서만 True. 로컬 HTTP 개발 중에 True 면 쿠키가 아예 저장되지 않는다.
+    cookie_secure: bool = False
+
     # 워커 전반의 동시 작업 수. 사진 디코딩은 CPU 병렬로 이득을 보므로
     # GPU 엔진 하나에 묶이는 트랜스코딩과 분리한다 (§6.3).
     worker_concurrency: int = 4
@@ -30,6 +35,10 @@ class Settings(BaseSettings):
     # 인제스트 (§6.1)
     ingest_scan_interval_seconds: int = 300
     ingest_stable_seconds: int = 30
+
+    @property
+    def session_ttl_seconds(self) -> int:
+        return self.session_ttl_days * 86400
 
     @property
     def originals_dir(self) -> Path:

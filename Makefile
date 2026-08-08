@@ -77,6 +77,17 @@ status-derive: ## 파생물 상태 요약
 	@$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} -tAc \
 		"SELECT derive_status, count(*) FROM asset WHERE deleted_at IS NULL GROUP BY derive_status ORDER BY 1;"
 
+create-user: ## 계정 생성 (E=이메일, ADMIN=1 이면 관리자)
+	@test -n "$(E)" || { echo 'E=이메일 을 지정하세요. 예: make create-user E=me@example.com ADMIN=1'; exit 1; }
+	$(DC) exec api python -m poogiegram.cli create-user "$(E)" $(if $(ADMIN),--admin,) $(if $(NAME),--name "$(NAME)",)
+
+users: ## 계정 목록
+	@$(DC) exec -T api python -m poogiegram.cli list-users
+
+passwd: ## 비밀번호 변경 (E=이메일)
+	@test -n "$(E)" || { echo 'E=이메일 을 지정하세요'; exit 1; }
+	$(DC) exec api python -m poogiegram.cli passwd "$(E)"
+
 migrate: ## DB 마이그레이션 적용
 	$(DC) exec api alembic upgrade head
 	@echo
@@ -101,4 +112,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status check-gid retry-derive status-derive migrate migration shell psql vainfo dump
+.PHONY: help up down logs ps status check-gid retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump

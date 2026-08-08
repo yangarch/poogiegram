@@ -6,13 +6,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 
+from .deps import current_user
 from .ingest.scanner import scan, walk_drop_dir
 from .models import Asset
 
-router = APIRouter(prefix="/api/ingest", tags=["ingest"])
+# 인증은 라우터 단위로 건다. 엔드포인트마다 붙이면 새로 추가할 때 빠뜨린다.
+router = APIRouter(prefix="/api/ingest", tags=["ingest"], dependencies=[Depends(current_user)])
 
 
 @router.get("/status")

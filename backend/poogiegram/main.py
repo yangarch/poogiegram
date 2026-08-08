@@ -13,6 +13,7 @@ from sqlalchemy import text
 from . import logs
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
+from .routes_auth import router as auth_router
 from .routes_ingest import router as ingest_router
 from .storage import StorageNotReady, ensure_runtime_dirs, verify_storage
 
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="poogiegram", lifespan=lifespan)
+app.include_router(auth_router)
 app.include_router(ingest_router)
 
 
