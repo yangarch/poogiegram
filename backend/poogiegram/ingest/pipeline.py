@@ -38,7 +38,7 @@ UNDATED_DIR = "_undated"
 
 @dataclass
 class Result:
-    event: str                    # ingested | duplicate | restored | failed
+    event: str                    # ingested | reindexed | duplicate | restored | failed
     asset_id: str | None = None
     detail: str = ""
 
@@ -391,12 +391,11 @@ async def reindex_all(sessionmaker, settings: Settings) -> dict[str, int]:
         async with sessionmaker() as session:
             async with session.begin():
                 try:
-                    result = await reindex_file(session, settings, path)
-                    status = result.status
+                    event = (await reindex_file(session, settings, path)).event
                 except FileProblem as exc:
                     log.warning("재색인 실패 %s — %s", path.name, exc)
-                    status = "failed"
-        counts[status] = counts.get(status, 0) + 1
+                    event = "failed"
+        counts[event] = counts.get(event, 0) + 1
 
     # 동시 인제스트로 놓친 라이브 포토 짝을 맞춘다 (§6.5)
     async with sessionmaker() as session:
