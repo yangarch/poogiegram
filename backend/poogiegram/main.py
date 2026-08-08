@@ -13,6 +13,7 @@ from sqlalchemy import text
 from . import logs
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
+from .routes_assets import router as assets_router
 from .routes_auth import router as auth_router
 from .routes_ingest import router as ingest_router
 from .storage import StorageNotReady, ensure_runtime_dirs, verify_storage
@@ -38,6 +39,10 @@ async def lifespan(app: FastAPI):
     app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
 
     log.info("poogiegram 기동 — media=%s derived=%s", settings.media_root, settings.derived_root)
+    if not settings.x_accel:
+        log.warning(
+            "X_ACCEL 이 꺼져 있습니다 — 앱이 파일을 직접 전송합니다. 개발 전용 설정입니다 (§3)."
+        )
     yield
 
     await app.state.arq.aclose()
@@ -47,6 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="poogiegram", lifespan=lifespan)
 app.include_router(auth_router)
+app.include_router(assets_router)
 app.include_router(ingest_router)
 
 
@@ -86,6 +92,9 @@ async def readyz():
     except Exception as exc:  # noqa: BLE001
         checks["redis"] = f"{type(exc).__name__}: {exc}"
         healthy = False
+
+    if not app.state.settings.x_accel:
+        checks["x_accel"] = "비활성 — 앱이 파일을 직접 전송합니다 (개발 전용)"
 
     return JSONResponse(
         status_code=200 if healthy else 503,

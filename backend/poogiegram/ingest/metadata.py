@@ -122,6 +122,35 @@ def _looks_like_screenshot(raw: dict, kind: str, make, model) -> bool:
     return not any(raw.get(tag) not in (None, "") for tag in _CAMERA_EVIDENCE)
 
 
+# EXIF Orientation 5~8 은 90/270도 회전을 뜻한다 — 화면에 보이는 가로세로가 뒤바뀐다.
+_SWAPPED_ORIENTATIONS = {5, 6, 7, 8}
+
+
+def _display_size(raw: dict, kind: str) -> tuple[int | None, int | None]:
+    """**화면에 보이는** 가로세로를 돌려준다.
+
+    파일에 저장된 값과 다를 수 있다. 세로로 찍은 아이폰 사진은 센서 방향 그대로
+    가로로 저장되고 Orientation 태그로 회전을 지시한다. 파생물은 회전을 적용해
+    만들므로(derive.py), DB 값도 같은 기준이어야 한다.
+
+    안 맞으면 그리드(§7.1)가 이미지 로드 전에 잘못된 비율로 자리를 잡아
+    세로 사진이 전부 가로로 배치된다.
+    """
+    w = _first(raw, "File:ImageWidth", "QuickTime:ImageWidth", "EXIF:ImageWidth")
+    h = _first(raw, "File:ImageHeight", "QuickTime:ImageHeight", "EXIF:ImageHeight")
+    if w is None or h is None:
+        return w, h
+
+    if kind == "video":
+        rotation = _first(raw, "Composite:Rotation", "QuickTime:Rotation") or 0
+        swap = int(float(rotation)) % 180 == 90
+    else:
+        orientation = _first(raw, "EXIF:Orientation")
+        swap = orientation is not None and int(orientation) in _SWAPPED_ORIENTATIONS
+
+    return (h, w) if swap else (w, h)
+
+
 def parse(raw: dict) -> Metadata:
     mime = raw.get("File:MIMEType")
     kind = "video" if (mime or "").startswith(_VIDEO_MIME) else "image"
@@ -141,12 +170,14 @@ def parse(raw: dict) -> Metadata:
     duration = _first(raw, "QuickTime:Duration", "Composite:Duration")
     duration_ms = int(float(duration) * 1000) if duration is not None else None
 
+    width, height = _display_size(raw, kind)
+
     return Metadata(
         raw={k: v for k, v in raw.items() if not k.startswith(_DROPPED_GROUPS)},
         mime=mime,
         kind=kind,
-        width=_first(raw, "File:ImageWidth", "QuickTime:ImageWidth", "EXIF:ImageWidth"),
-        height=_first(raw, "File:ImageHeight", "QuickTime:ImageHeight", "EXIF:ImageHeight"),
+        width=width,
+        height=height,
         duration_ms=duration_ms,
         camera=camera,
         # -n 덕분에 십진수로 들어온다. Composite 쪽이 부호(남반구·서반구)까지 반영한 값이다.

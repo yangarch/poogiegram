@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     secret_key: str = "change-me"
 
+    # 파일 전송을 nginx 에 넘긴다 (§3). 끄면 앱이 직접 전송하는데 개발 전용이다 —
+    # 운영에서 끄면 대용량 파일 하나가 워커를 오래 점유해 API 전체가 느려진다.
+    x_accel: bool = True
+
     # 세션 (§8). 슬라이딩 만료라 쓰는 동안은 유지된다.
     session_ttl_days: int = 30
     # HTTPS 뒤에서만 True. 로컬 HTTP 개발 중에 True 면 쿠키가 아예 저장되지 않는다.
