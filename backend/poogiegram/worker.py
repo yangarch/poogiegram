@@ -17,7 +17,7 @@ from . import logs
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
 from .ingest.derive import DeriveError, generate
-from .ingest.pipeline import ingest_one
+from .ingest.pipeline import ingest_one, repair_pairings
 from .ingest.scanner import scan
 from .storage import ensure_runtime_dirs, verify_storage
 
@@ -85,7 +85,17 @@ async def scan_drop_folder(ctx) -> dict:
         for c in waiting:
             log.debug("  대기(안정성 미충족): %s", c.path.name)
         requeued = await _requeue_pending_derives(ctx)
-        return {"ready": len(ready), "waiting": len(waiting), "requeued": requeued}
+        async with ctx["sessionmaker"]() as session:
+            async with session.begin():
+                repaired = await repair_pairings(session)
+        if repaired:
+            log.info("라이브 포토 페어링 보정: %d건", repaired)
+        return {
+            "ready": len(ready),
+            "waiting": len(waiting),
+            "requeued": requeued,
+            "repaired": repaired,
+        }
     finally:
         await redis.delete(_SCAN_LOCK)
 

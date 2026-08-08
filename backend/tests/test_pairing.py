@@ -121,3 +121,46 @@ async def test_삭제된_자산과는_묶이지_않는다(session):
     motion = await _add(session, _asset("gone.mov", "video"))
     await _pair_live_photo(session, motion)
     assert still.live_motion_id is None
+
+
+# ── 동시 인제스트 보정 ───────────────────────────────────────────────
+
+
+async def test_동시_인제스트로_누락된_짝을_보정한다(session):
+    """파일마다 별도 트랜잭션이라 동시에 들어오면 서로를 못 본다.
+
+    실제로 HEIC·JPEG·MOV 를 한꺼번에 넣었을 때 JPEG 만 연결되지 않았다.
+    각자 커밋 전이라 조회에 걸리지 않았기 때문이다.
+    """
+    from poogiegram.ingest.pipeline import repair_pairings
+
+    # 페어링 없이 들어온 상태를 만든다 (동시 인제스트의 결과)
+    heic = await _add(session, _asset("IMG_9.HEIC", "image"))
+    jpeg = await _add(session, _asset("IMG_9_o.jpeg", "image"))
+    motion = await _add(session, _asset("IMG_9.mov", "video"))
+    assert motion.is_live_motion is False and heic.live_motion_id is None
+
+    n = await repair_pairings(session)
+
+    assert n == 3, "영상 1건 + 정지컷 2건이 보정돼야 한다"
+    assert motion.is_live_motion is True
+    assert heic.live_motion_id == motion.id
+    assert jpeg.live_motion_id == motion.id
+
+
+async def test_보정은_멱등이다(session):
+    from poogiegram.ingest.pipeline import repair_pairings
+
+    await _add(session, _asset("IMG_A.HEIC", "image"))
+    await _add(session, _asset("IMG_A.mov", "video"))
+    assert await repair_pairings(session) == 2
+    assert await repair_pairings(session) == 0, "이미 정리된 뒤에는 할 일이 없어야 한다"
+
+
+async def test_짝없는_영상도_숨김_처리된다(session):
+    """정지컷이 아직 안 왔어도 동반 클립은 타임라인에 노출되면 안 된다."""
+    from poogiegram.ingest.pipeline import repair_pairings
+
+    motion = await _add(session, _asset("lonely.mov", "video"))
+    await repair_pairings(session)
+    assert motion.is_live_motion is True

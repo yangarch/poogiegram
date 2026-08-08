@@ -150,6 +150,63 @@ async def _pair_live_photo(session, asset: Asset) -> None:
             break
 
 
+async def repair_pairings(session) -> int:
+    """짝을 못 찾은 라이브 포토를 다시 묶는다 (§6.5).
+
+    인제스트 시점의 페어링만으로는 부족하다. 파일마다 별도 트랜잭션에서 처리되므로
+    **동시에 들어온 정지컷과 영상이 서로를 보지 못한다** — 각자 커밋 전이기 때문이다.
+    실제로 HEIC·JPEG·MOV 를 한꺼번에 넣었을 때 JPEG 만 누락되는 것을 확인했다.
+
+    도착 순서가 정해져 있지 않은 드롭 폴더에서는 나중에 짝이 오는 경우도 있어,
+    어느 쪽이든 주기적으로 훑어 맞물리게 하는 편이 확실하다. 멱등이라 몇 번 돌려도 된다.
+    """
+    # 1) content_id 가 있는 영상은 그 자체로 라이브 포토 동반 클립이다
+    unmarked = (
+        await session.scalars(
+            select(Asset).where(
+                Asset.kind == "video",
+                Asset.content_id.is_not(None),
+                Asset.is_live_motion.is_(False),
+                Asset.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    for motion in unmarked:
+        motion.is_live_motion = True
+
+    # 2) 짝이 있는데 연결되지 않은 정지컷을 잇는다
+    motions = {
+        m.content_id: m
+        for m in (
+            await session.scalars(
+                select(Asset).where(
+                    Asset.kind == "video",
+                    Asset.content_id.is_not(None),
+                    Asset.deleted_at.is_(None),
+                )
+            )
+        ).all()
+    }
+    if not motions:
+        return len(unmarked)
+
+    orphans = (
+        await session.scalars(
+            select(Asset).where(
+                Asset.kind == "image",
+                Asset.content_id.in_(list(motions)),
+                Asset.live_motion_id.is_(None),
+                Asset.deleted_at.is_(None),
+            )
+        )
+    ).all()
+    for still in orphans:
+        still.live_motion_id = motions[still.content_id].id
+        log.info("라이브 포토 뒤늦은 연결: %s", still.original_filename)
+
+    return len(unmarked) + len(orphans)
+
+
 async def ingest_file(session, settings: Settings, src: Path) -> Result:
     """파일 하나를 인제스트한다. 예외를 던지지 않고 Result 로 돌려준다."""
     name = src.name
