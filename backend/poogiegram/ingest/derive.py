@@ -31,6 +31,15 @@ DISPLAY = 2560    # HEIC 의 브라우저 표시용 원본 대체
 
 FFMPEG_TIMEOUT = 120
 
+# 파생물 파일 권한 (§3.3).
+#
+# tempfile 은 보안상 0600 으로 파일을 만들고, rename 은 그 모드를 그대로 가져간다.
+# 그대로 두면 nginx(www-data)가 읽지 못해 **화면은 뜨는데 사진만 안 보인다.**
+# 그룹(poogiegram)에 읽기를 열어 nginx 가 X-Accel-Redirect 로 서빙할 수 있게 한다.
+# world-readable 로 열지 않는 이유는 §3.3 참조.
+DERIVED_FILE_MODE = 0o640
+DERIVED_DIR_MODE = 0o750
+
 
 class DeriveError(RuntimeError):
     pass
@@ -41,6 +50,19 @@ class Derived:
     thumb: str
     preview: str
     display: str | None = None
+
+
+def _ensure_dir(path: Path) -> None:
+    """디렉터리를 만들고 그룹이 들어갈 수 있게 권한을 맞춘다.
+
+    mkdir 의 mode 인자는 umask 에 깎이므로 만든 뒤 chmod 로 확정한다.
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.chmod(DERIVED_DIR_MODE)
+    except PermissionError:
+        # 다른 소유자가 이미 만들어 둔 경우. 접근만 되면 문제없다.
+        pass
 
 
 def derived_dir(root: Path, sha256: str) -> Path:
@@ -57,15 +79,17 @@ def _save_atomic(img: Image.Image, dest: Path, fmt: str, quality: int) -> None:
     도중에 죽으면 반쪽 파일이 남는데, 크기가 0 이 아니라 '있는데 깨진' 상태라
     다음 실행에서 정상으로 오인된다.
     """
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_dir(dest.parent)
     with tempfile.NamedTemporaryFile(dir=dest.parent, suffix=".tmp", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
-        img.save(tmp_path, format=fmt, quality=quality, method=4 if fmt == "WEBP" else None)
-        tmp_path.replace(dest)
-    except TypeError:
-        # JPEG 등 method 인자를 받지 않는 포맷
-        img.save(tmp_path, format=fmt, quality=quality)
+        try:
+            img.save(tmp_path, format=fmt, quality=quality, method=4 if fmt == "WEBP" else None)
+        except TypeError:
+            # JPEG 등 method 인자를 받지 않는 포맷
+            img.save(tmp_path, format=fmt, quality=quality)
+        # rename 전에 권한을 맞춘다. tempfile 이 만든 0600 그대로면 nginx 가 못 읽는다.
+        tmp_path.chmod(DERIVED_FILE_MODE)
         tmp_path.replace(dest)
     except Exception:
         tmp_path.unlink(missing_ok=True)
@@ -78,7 +102,7 @@ def poster_frame(video: Path, dest: Path) -> None:
     맨 앞 프레임은 검거나 흐린 경우가 많아 1초 지점을 쓴다. 1초보다 짧으면
     (라이브 포토 동반 클립이 대개 3초 안팎) 맨 앞으로 떨어진다.
     """
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_dir(dest.parent)
     for seek in ("1", "0"):
         proc = subprocess.run(
             ["ffmpeg", "-loglevel", "error", "-y", "-ss", seek, "-i", str(video),

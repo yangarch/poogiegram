@@ -103,3 +103,23 @@ def test_재실행하면_덮어쓴다(tmp_path):
     generate(src, SHA, "image", out, rotation=90)
     w, h = Image.open(derived_dir(out, SHA) / "preview_1600.webp").size
     assert h > w, "두 번째 결과가 반영돼야 한다"
+
+
+def test_파생물이_그룹에서_읽을_수_있다(tmp_path):
+    """tempfile 은 0600 으로 만들고 rename 은 그 모드를 가져간다.
+
+    그대로 두면 nginx(www-data)가 읽지 못해 화면은 뜨는데 사진만 안 보인다.
+    실제로 그렇게 배포됐다가 setup-nginx.sh 의 점검에서 잡혔다.
+    """
+    import stat
+
+    src = _jpeg(tmp_path / "a.jpg")
+    out = tmp_path / "derived"
+    generate(src, SHA, "image", out, needs_display=True)
+
+    d = derived_dir(out, SHA)
+    for f in ("thumb_320.webp", "preview_1600.webp", "display.jpg"):
+        mode = stat.S_IMODE((d / f).stat().st_mode)
+        assert mode & stat.S_IRGRP, f"{f} 를 그룹이 읽을 수 없다 (mode {oct(mode)})"
+
+    assert stat.S_IMODE(d.stat().st_mode) & stat.S_IXGRP, "디렉터리에 그룹 진입 권한이 없다"
