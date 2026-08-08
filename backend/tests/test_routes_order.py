@@ -49,7 +49,7 @@ def test_api_라우트가_폴백보다_먼저_등록된다(app_with_static):
     fallback = paths.index("/{path:path}")
     api = [p for p in paths if p.startswith("/api/")]
 
-    assert api, "API 라우트가 하나도 없다 — 라우터 등록이 빠졌는지 확인"
+    assert api, f"API 라우트가 하나도 없다. 등록된 경로: {paths}"
     for path in api:
         assert paths.index(path) < fallback, f"{path} 가 SPA 폴백에 가려진다"
 
@@ -68,4 +68,4 @@ def test_static이_없으면_폴백을_붙이지_않는다(tmp_path):
 
     assert "/{path:path}" not in paths
     assert "/healthz" in paths
-    assert any(p.startswith("/api/") for p in paths)
+    assert any(p.startswith("/api/") for p in paths), f"등록된 경로: {paths}"
