@@ -66,6 +66,11 @@ check-gid: ## .env 의 GID 가 호스트 그룹과 맞는지 확인
 	fi; \
 	echo "GID 확인: poogiegram=$$POOGIEGRAM_GID render=$${RENDER_GID:-(GPU 없음)}"
 
+retry-derive: ## 실패한 파생물을 다시 시도 (원인을 고친 뒤 실행)
+	$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} \
+		-c "UPDATE asset SET derive_status='pending' WHERE derive_status='failed' AND deleted_at IS NULL;"
+	@curl -sXPOST http://127.0.0.1:$${API_PORT:-8005}/api/ingest/scan >/dev/null && echo "재시도 큐잉됨"
+
 migrate: ## DB 마이그레이션 적용
 	$(DC) exec api alembic upgrade head
 	@echo
@@ -90,4 +95,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status check-gid migrate migration shell psql vainfo dump
+.PHONY: help up down logs ps status check-gid retry-derive migrate migration shell psql vainfo dump

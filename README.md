@@ -47,10 +47,14 @@ sudo touch /mnt/media/originals/.poogiegram-ok
 ```bash
 sudo groupadd -f poogiegram
 sudo usermod -aG poogiegram $USER          # 업로드할 계정
-sudo chown -R root:poogiegram /mnt/media
+sudo chown -R root:poogiegram /mnt/media /var/lib/poogiegram
 sudo chmod 2775 /mnt/media/{originals,trash,db,.tmp} /mnt/media/incoming/{drop,failed}
+sudo chmod 2775 /var/lib/poogiegram /var/lib/poogiegram/derived
 sudo chmod 755  /mnt/media /mnt/media/incoming
 ```
+
+`derived/` 를 빠뜨리면 인제스트는 되는데 **파생물만 전부 실패한다** — HEIC 는
+파생물이 없으면 화면에 아무것도 안 보이므로 증상이 "사진이 안 보인다"로 나타난다.
 
 `2775` 의 setgid 비트가 핵심이다 — 새로 만들어지는 파일이 `poogiegram` 그룹을 상속해서,
 올린 사람과 워커가 같은 그룹으로 접근하게 된다.

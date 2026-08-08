@@ -137,10 +137,21 @@ async def derive_asset(ctx, asset_id: str) -> dict:
                     needs_display=asset.needs_display_copy,
                     rotation=asset.rotation or 0,
                 )
-            except (DeriveError, OSError) as exc:
+            except DeriveError as exc:
+                # 이 파일 자체의 문제. 다시 시도해도 같은 결과다.
                 asset.derive_status = "failed"
                 log.warning("파생물 생성 실패: %s — %s", asset.original_filename, exc)
                 return {"error": str(exc)}
+            except OSError as exc:
+                # 권한·디스크 등 환경 문제. 조건이 바뀌면 성공하므로 pending 으로 두어
+                # 다음 스캔이 다시 집어가게 한다. failed 로 못박으면 권한을 고쳐도
+                # 영원히 복구되지 않는다.
+                log.error(
+                    "파생물 생성 중단(환경 문제, 재시도 예정): %s — %s\n"
+                    "  derived 디렉터리 권한을 확인하세요: ls -ld %s",
+                    asset.original_filename, exc, settings.derived_root,
+                )
+                raise
 
             asset.derive_status = "ready"
             log.info("파생물 완료: %s", asset.original_filename)
