@@ -23,8 +23,11 @@ up: ## 전체 스택 기동 — 마이그레이션까지 적용하고 상태를 
 down: ## 전체 스택 정지
 	$(DC) down
 
-logs: ## 로그 추적 (S=서비스명 으로 한정 가능)
+logs: ## 로그 추적 — Ctrl+C 로 종료 (S=서비스명 으로 한정 가능)
 	$(DC) logs -f $(S)
+
+tail: ## 최근 로그만 출력하고 끝낸다 (S=서비스명, N=줄수, 기본 40)
+	@$(DC) logs --tail=$(if $(N),$(N),40) $(S)
 
 ps: ## 컨테이너 상태
 	$(DC) ps
@@ -126,4 +129,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status check-gid fix-perms test retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump
+.PHONY: help up down logs tail ps status check-gid fix-perms test retry-derive status-derive create-user users passwd migrate migration shell psql vainfo dump
