@@ -3,11 +3,14 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 import redis.asyncio as aioredis
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from . import logs
@@ -54,6 +57,31 @@ app = FastAPI(title="poogiegram", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(assets_router)
 app.include_router(ingest_router)
+
+# ── SPA 서빙 ─────────────────────────────────────────────────────────
+# 빌드 산출물이 있을 때만 붙인다. 개발 중에는 Vite 개발 서버가 담당하므로
+# 없어도 API 는 정상 동작해야 한다.
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+
+if _STATIC.is_dir():
+    app.mount("/assets", StaticFiles(directory=_STATIC / "assets"), name="spa-assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str):
+        """클라이언트 라우팅을 위해 알 수 없는 경로도 index.html 로 돌려준다.
+
+        API 경로는 위에서 이미 처리되므로 여기까지 오지 않는다. 다만 없는 API 를
+        부르면 index.html 이 200 으로 돌아가 디버깅이 헷갈리므로 404 로 끊는다.
+        """
+        if path.startswith("api/"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "없는 API 경로입니다")
+        candidate = (_STATIC / path).resolve()
+        # 경로 탈출 방지 — ../ 로 static 밖 파일을 읽지 못하게 한다
+        if path and candidate.is_file() and candidate.is_relative_to(_STATIC):
+            return FileResponse(candidate)
+        return FileResponse(_STATIC / "index.html")
+else:
+    log.warning("static/ 이 없습니다 — API 전용으로 동작합니다 (개발 모드)")
 
 
 @app.get("/healthz")

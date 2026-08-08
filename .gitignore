@@ -39,3 +39,4 @@ scratch/
 *.mp4
 !web/public/**
 !docs/**/*.png
+web/package-lock.json.bak

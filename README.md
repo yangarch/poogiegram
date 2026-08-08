@@ -107,6 +107,16 @@ sudo ln -s /etc/nginx/sites-available/poogiegram.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+## 개발
+
+프런트엔드만 따로 고칠 때는 Vite 개발 서버를 쓴다. `/api` 는 백엔드로 넘어간다.
+
+```bash
+cd web && npm install && npm run dev     # http://localhost:5173
+```
+
+빌드 산출물은 이미지에 함께 들어가므로 배포 시 별도 작업이 없다.
+
 ## 확인
 
 ```bash
@@ -125,7 +135,7 @@ curl -sXPOST localhost:8005/api/ingest/scan  # 주기 스캔을 기다리지 않
 |---|---|---|
 | M0 | 저장소·Compose 골격, 헬스체크 | ✅ 완료 |
 | M1 | 드롭 폴더 인제스트 + HEIC 변환 + 썸네일 | ✅ 완료 |
-| M2 | 인증 + 타임라인 + 라이트박스 | **다음** |
+| M2 | 인증 + 타임라인 + 라이트박스 | **진행 중** — 인증·서빙·그리드 완료, 라이트박스 남음 |
 | M3 | 동영상 (HEVC → HLS, 톤매핑) | |
 | M4 | 앨범·태그·검색 | |
 | M5 | 웹 업로드, 공유 링크, 휴지통 | |

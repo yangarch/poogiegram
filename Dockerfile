@@ -1,3 +1,15 @@
+# ── 1단계: 프런트엔드 빌드 ───────────────────────────────────────────────
+# SPA 는 파일 몇 개뿐이라 nginx 로 따로 서빙해도 성능 차이가 없다.
+# 이미지 하나로 묶어 docker compose up 만으로 전부 뜨게 한다.
+# 미디어 바이트는 어차피 nginx 가 X-Accel-Redirect 로 처리하므로 §3 원칙과 무관하다.
+FROM node:22-slim AS web
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/ ./
+RUN npm run build
+
+# ── 2단계: 런타임 ────────────────────────────────────────────────────────
 FROM python:3.12-slim-bookworm
 
 # ffmpeg (bookworm = 5.1.x, Ubuntu 22.04 의 4.4 보다 톤매핑·VAAPI 수정이 많이 들어가 있다)
@@ -37,12 +49,13 @@ WORKDIR /app
 
 # requirements.lock 은 검증된 빌드에서 뽑은 전체 잠금이다 (전이 의존성 포함).
 # requirements.txt 는 직접 의존성 목록으로 남겨두고, 실제 설치는 lock 으로 한다.
-COPY requirements.txt requirements.lock ./
+COPY backend/requirements.txt backend/requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 
-COPY alembic.ini ./
-COPY migrations ./migrations
-COPY poogiegram ./poogiegram
+COPY backend/alembic.ini ./
+COPY backend/migrations ./migrations
+COPY backend/poogiegram ./poogiegram
+COPY --from=web /web/dist ./static
 
 # 비루트로 실행. worker 는 compose 에서 group_add 로 render 그룹을 추가로 받는다.
 RUN useradd --create-home --uid 10001 app && chown -R app:app /app
