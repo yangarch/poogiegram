@@ -13,6 +13,7 @@ help: ## 사용 가능한 명령
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 up: ## 전체 스택 기동 — 마이그레이션까지 적용하고 상태를 확인한다
+	@$(MAKE) --no-print-directory check-gid
 	$(DC) up -d --build --wait
 	@echo "마이그레이션 적용..."
 	@$(DC) exec -T api alembic upgrade head
@@ -43,6 +44,28 @@ status: ## 헬스체크 확인
 	curl -sS --max-time 3 http://127.0.0.1:$$port/readyz || true; \
 	exit 1
 
+check-gid: ## .env 의 GID 가 호스트 그룹과 맞는지 확인
+	@set -e; \
+	. ./.env 2>/dev/null || { echo ".env 가 없습니다. cp .env.example .env"; exit 1; }; \
+	command -v getent >/dev/null || { echo "getent 없음 — GID 확인을 건너뜁니다(리눅스 호스트가 아님)"; exit 0; }; \
+	real_pg=$$(getent group poogiegram | cut -d: -f3); \
+	real_rd=$$(getent group render     | cut -d: -f3); \
+	[ -n "$$real_pg" ] || { echo "poogiegram 그룹이 없습니다:  sudo groupadd -f poogiegram"; exit 1; }; \
+	[ "$$POOGIEGRAM_GID" = "$$real_pg" ] || { \
+		echo "POOGIEGRAM_GID 불일치: .env=$$POOGIEGRAM_GID, 실제=$$real_pg"; \
+		echo "  sed -i 's/^POOGIEGRAM_GID=.*/POOGIEGRAM_GID=$$real_pg/' .env"; exit 1; }; \
+	if [ -e /dev/dri ]; then \
+		[ -n "$$real_rd" ] || { echo "render 그룹이 없습니다. /dev/dri 소유 그룹을 확인하세요:"; \
+			stat -c '  %n → 그룹 %G (gid %g)' /dev/dri/renderD128; exit 1; }; \
+		[ "$$RENDER_GID" = "$$real_rd" ] || { \
+			echo "RENDER_GID 불일치: .env=$$RENDER_GID, 실제=$$real_rd"; \
+			echo "  sed -i 's/^RENDER_GID=.*/RENDER_GID=$$real_rd/' .env"; exit 1; }; \
+		[ "$$RENDER_GID" != "$$POOGIEGRAM_GID" ] || { \
+			echo "RENDER_GID 와 POOGIEGRAM_GID 가 같습니다($$RENDER_GID). 서로 다른 그룹이므로 한쪽이 잘못됐습니다."; \
+			getent group render poogiegram; exit 1; }; \
+	fi; \
+	echo "GID 확인: poogiegram=$$POOGIEGRAM_GID render=$${RENDER_GID:-(GPU 없음)}"
+
 migrate: ## DB 마이그레이션 적용
 	$(DC) exec api alembic upgrade head
 	@echo
@@ -67,4 +90,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status migrate migration shell psql vainfo dump
+.PHONY: help up down logs ps status check-gid migrate migration shell psql vainfo dump
