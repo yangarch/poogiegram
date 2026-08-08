@@ -85,7 +85,20 @@ make up          # 빌드 → 기동 → 마이그레이션 → 상태 확인까
 
 `/dev/dri`가 있으면 VA-API 오버레이가 자동으로 적용된다.
 
-**5. nginx (외부 접속이 필요할 때)**
+**5. SFTP 드롭 계정 (선택)**
+
+관리 계정으로 올리면 `originals/` 까지 보이고 지울 수도 있다.
+전용 계정을 만들어 드롭 폴더에 가둔다.
+
+```bash
+sudo ./deploy/setup-sftp.sh          # 계정명 기본값 poogiedrop
+```
+
+스크립트가 chroot 조건(경로 소유·권한, setgid)을 먼저 점검하고 문제가 있으면
+고칠 명령과 함께 멈춘다. 여러 번 실행해도 안전하다.
+**sshd 재적용은 기존 SSH 세션을 열어둔 채로** 하는 것을 권한다.
+
+**6. nginx (외부 접속이 필요할 때)**
 
 ```bash
 sudo cp deploy/nginx/poogiegram.conf.example /etc/nginx/sites-available/poogiegram.conf
