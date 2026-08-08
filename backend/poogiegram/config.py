@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     secret_key: str = "change-me"
 
+    # 워커 전반의 동시 작업 수. 사진 디코딩은 CPU 병렬로 이득을 보므로
+    # GPU 엔진 하나에 묶이는 트랜스코딩과 분리한다 (§6.3).
+    worker_concurrency: int = 4
+
     # 트랜스코딩 (§6.3, §6.4)
     transcode_hwaccel: str = "auto"          # vaapi | none | auto
     transcode_concurrency: int = 2

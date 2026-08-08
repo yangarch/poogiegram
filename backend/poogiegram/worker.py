@@ -16,6 +16,7 @@ from arq.connections import RedisSettings
 from . import logs
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
+from .ingest.derive import DeriveError, generate
 from .ingest.pipeline import ingest_one
 from .ingest.scanner import scan
 from .storage import ensure_runtime_dirs, verify_storage
@@ -64,7 +65,54 @@ async def ingest_file(ctx, path_str: str) -> dict:
 
     result = await ingest_one(ctx["sessionmaker"], ctx["settings"], path)
     log.info("%s: %s %s", path.name, result.event, result.detail)
+
+    # 파생물은 별도 작업으로 분리한다. 인제스트(빠름)와 디코딩(느림)을 한 작업에
+    # 묶으면 큐가 디코딩에 막혀 새 파일이 DB 에 늦게 나타난다.
+    if result.event in ("ingested", "restored") and result.asset_id:
+        await ctx["redis"].enqueue_job("derive_asset", result.asset_id)
     return {"event": result.event, "asset_id": result.asset_id}
+
+
+async def derive_asset(ctx, asset_id: str) -> dict:
+    """자산 하나의 파생물을 만든다 (§6.2).
+
+    HEIC 는 이 작업이 끝나야 크롬에서 보인다. 실패해도 원본은 그대로 두고
+    derive_status 만 failed 로 남긴다 — UI 가 "원본은 있는데 표시 못 함"을
+    구분해 보여줄 수 있어야 한다 (§5).
+    """
+    from sqlalchemy import select
+
+    from .models import Asset
+
+    settings = ctx["settings"]
+    async with ctx["sessionmaker"]() as session:
+        async with session.begin():
+            asset = await session.scalar(select(Asset).where(Asset.id == asset_id))
+            if asset is None or asset.deleted_at is not None:
+                return {"skipped": "없거나 삭제됨"}
+
+            src = settings.originals_dir / asset.path
+            if not src.exists():
+                asset.derive_status = "failed"
+                return {"error": f"원본 없음: {asset.path}"}
+
+            try:
+                result = generate(
+                    src,
+                    asset.sha256,
+                    asset.kind,
+                    settings.derived_root,
+                    needs_display=asset.needs_display_copy,
+                    rotation=asset.rotation or 0,
+                )
+            except (DeriveError, OSError) as exc:
+                asset.derive_status = "failed"
+                log.warning("파생물 생성 실패: %s — %s", asset.original_filename, exc)
+                return {"error": str(exc)}
+
+            asset.derive_status = "ready"
+            log.info("파생물 완료: %s", asset.original_filename)
+            return {"thumb": result.thumb, "display": result.display}
 
 
 async def _wait_for_schema(ctx) -> None:
@@ -141,9 +189,9 @@ async def shutdown(ctx) -> None:
 
 
 class WorkerSettings:
-    functions = [scan_drop_folder, ingest_file]
+    functions = [scan_drop_folder, ingest_file, derive_asset]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     # GPU 인코드 엔진이 하나뿐이라 무한정 늘려도 의미가 없다 (§6.3).
-    max_jobs = get_settings().transcode_concurrency
+    max_jobs = get_settings().worker_concurrency
