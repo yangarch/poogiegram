@@ -109,9 +109,14 @@ retry-derive: ## 실패한 파생물을 다시 시도 (원인을 고친 뒤 실�
 	@$(DC) exec -T redis sh -c "redis-cli --scan --pattern 'arq:result:derive:*' | xargs -r redis-cli del" >/dev/null 2>&1 || true
 	@curl -sXPOST http://127.0.0.1:$${API_PORT:-8005}/api/ingest/scan >/dev/null && echo "재시도 큐잉됨"
 
-status-derive: ## 파생물 상태 요약
+status-derive: ## 파생물 상태 요약 (실패 사유 포함)
 	@$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} -tAc \
 		"SELECT derive_status, count(*) FROM asset WHERE deleted_at IS NULL GROUP BY derive_status ORDER BY 1;"
+	@# 실패 사유를 바로 보여준다. 이게 없어서 로그를 뒤져야 했다.
+	@$(DC) exec -T db psql -U $${POSTGRES_USER:-poogiegram} -d $${POSTGRES_DB:-poogiegram} -qAF'  ' \
+		-c "SELECT original_filename, left(derive_error, 90) FROM asset \
+		    WHERE derive_status = 'failed' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 10;" \
+		| sed '/^$$/d;$$d'
 
 create-user: ## 계정 생성 (E=이메일, ADMIN=1 이면 관리자)
 	@test -n "$(E)" || { echo 'E=이메일 을 지정하세요. 예: make create-user E=me@example.com ADMIN=1'; exit 1; }

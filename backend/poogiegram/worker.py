@@ -123,6 +123,17 @@ async def ingest_file(ctx, path_str: str) -> dict:
     return {"event": result.event, "asset_id": result.asset_id}
 
 
+# 사유는 DB 에 들어가므로 길이를 제한한다. ffmpeg 출력이 통째로 들어오면
+# 목록 조회가 무거워진다. 앞부분에 원인이 있다.
+DERIVE_ERROR_MAX = 500
+
+
+def _fail(asset, reason: str) -> dict:
+    asset.derive_status = "failed"
+    asset.derive_error = reason[:DERIVE_ERROR_MAX]
+    return {"error": reason}
+
+
 async def derive_asset(ctx, asset_id: str) -> dict:
     """자산 하나의 파생물을 만든다 (§6.2).
 
@@ -143,8 +154,7 @@ async def derive_asset(ctx, asset_id: str) -> dict:
 
             src = settings.originals_dir / asset.path
             if not src.exists():
-                asset.derive_status = "failed"
-                return {"error": f"원본 없음: {asset.path}"}
+                return _fail(asset, f"원본 없음: {asset.path}")
 
             try:
                 result = generate(
@@ -157,9 +167,8 @@ async def derive_asset(ctx, asset_id: str) -> dict:
                 )
             except DeriveError as exc:
                 # 이 파일 자체의 문제. 다시 시도해도 같은 결과다.
-                asset.derive_status = "failed"
                 log.warning("파생물 생성 실패: %s — %s", asset.original_filename, exc)
-                return {"error": str(exc)}
+                return _fail(asset, str(exc))
             except OSError as exc:
                 # 권한·디스크 등 환경 문제. 조건이 바뀌면 성공하므로 pending 으로 두어
                 # 다음 스캔이 다시 집어가게 한다. failed 로 못박으면 권한을 고쳐도
@@ -172,6 +181,7 @@ async def derive_asset(ctx, asset_id: str) -> dict:
                 raise
 
             asset.derive_status = "ready"
+            asset.derive_error = None   # 재시도로 성공했으면 옛 사유를 남기지 않는다
             log.info("파생물 완료: %s", asset.original_filename)
             return {"thumb": result.thumb, "display": result.display}
 

@@ -106,6 +106,9 @@ class Asset(Base):
     is_hdr: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     needs_display_copy: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     derive_status: Mapped[str] = mapped_column(String(16), default="pending", server_default=text("'pending'"))
+    # 마지막 실패 사유. 없으면 실패할 때마다 컨테이너 로그를 뒤져야 하는데,
+    # 로그는 재시작하면 잘리고 시간이 지나면 사라진다. 성공하면 비운다.
+    derive_error: Mapped[str | None] = mapped_column(Text)
     video_status: Mapped[str | None] = mapped_column(String(16))
 
     # ── 라이브 포토 (§6.5) ──────────────────────────────────────────
