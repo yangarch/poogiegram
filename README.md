@@ -54,9 +54,7 @@ getent group render | cut -d: -f3       # RENDER_GID 에 넣는다
 **3. 기동**
 
 ```bash
-make up
-make migrate     # DB 스키마 적용 (최초 1회, 이후 스키마 변경 시)
-make status
+make up          # 빌드 → 기동 → 마이그레이션 → 상태 확인까지 한 번에
 ```
 
 `readyz` 의 `database` 항목에 `ok (migration 0001)` 처럼 리비전이 함께 표시된다 —
@@ -79,6 +77,10 @@ sudo nginx -t && sudo systemctl reload nginx
 make status                       # 스토리지·DB·Redis 상태
 make vainfo                       # 컨테이너에서 VA-API 가 보이는지
 curl -s localhost:8005/readyz     # 상세 체크 결과
+
+# 인제스트 (§6.1)
+curl -s localhost:8005/api/ingest/status   # 대기·완료·실패 건수
+curl -sXPOST localhost:8005/api/ingest/scan  # 주기 스캔을 기다리지 않고 즉시
 ```
 
 ## 진행 상황

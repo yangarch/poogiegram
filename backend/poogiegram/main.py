@@ -4,12 +4,16 @@ import logging
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
+from arq import create_pool
+from arq.connections import RedisSettings
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from . import logs
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
+from .routes_ingest import router as ingest_router
 from .storage import StorageNotReady, ensure_runtime_dirs, verify_storage
 
 log = logging.getLogger("poogiegram")
@@ -17,6 +21,7 @@ log = logging.getLogger("poogiegram")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logs.setup()
     settings = get_settings()
 
     # 마운트 확인이 먼저다 (§4.6). 실패하면 기동을 거부한다 —
@@ -28,15 +33,19 @@ async def lifespan(app: FastAPI):
     app.state.engine = make_engine(settings.database_url)
     app.state.sessionmaker = make_sessionmaker(app.state.engine)
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    # 워커에 작업을 넣기 위한 arq 풀. 수동 스캔 트리거에 쓴다 (§6.1).
+    app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
 
     log.info("poogiegram 기동 — media=%s derived=%s", settings.media_root, settings.derived_root)
     yield
 
+    await app.state.arq.aclose()
     await app.state.redis.aclose()
     await app.state.engine.dispose()
 
 
 app = FastAPI(title="poogiegram", lifespan=lifespan)
+app.include_router(ingest_router)
 
 
 @app.get("/healthz")

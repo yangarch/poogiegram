@@ -14,3 +14,5 @@ redis>=5.2
 pillow>=11.0
 pillow-heif>=0.20
 python-multipart>=0.0.12
+pytest>=8.0
+pytest-asyncio>=0.24

@@ -12,8 +12,10 @@ help: ## 사용 가능한 명령
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-up: ## 전체 스택 기동 (헬스체크 통과까지 대기)
+up: ## 전체 스택 기동 — 마이그레이션까지 적용하고 상태를 확인한다
 	$(DC) up -d --build --wait
+	@echo "마이그레이션 적용..."
+	@$(DC) exec -T api alembic upgrade head
 	@echo
 	@$(MAKE) --no-print-directory status
 
