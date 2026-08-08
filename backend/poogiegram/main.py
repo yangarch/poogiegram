@@ -9,7 +9,7 @@ from pathlib import Path
 import redis.asyncio as aioredis
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -54,30 +54,49 @@ async def lifespan(app: FastAPI):
     await app.state.engine.dispose()
 
 
-app = FastAPI(title="poogiegram", lifespan=lifespan)
-app.include_router(auth_router)
-app.include_router(assets_router)
-app.include_router(ingest_router)
-
-# 프런트엔드 빌드 산출물 위치. 환경변수로 덮어쓸 수 있게 둔 이유는 테스트 때문이다 —
-# 라우트는 임포트 시점에 등록되므로, 검사하려면 static/ 이 있는 상태를 만들 수 있어야 한다.
-_STATIC = Path(
-    os.environ.get("STATIC_DIR") or Path(__file__).resolve().parent.parent / "static"
-)
+def default_static_dir() -> Path:
+    """프런트엔드 빌드 산출물 위치. Dockerfile 이 web/dist 를 여기로 복사한다."""
+    return Path(os.environ.get("STATIC_DIR") or Path(__file__).resolve().parent.parent / "static")
 
 
-@app.get("/healthz")
+def create_app(static_dir: Path | None = None) -> FastAPI:
+    """앱을 조립한다.
+
+    팩토리로 둔 이유는 **라우트 등록 순서가 정확성을 좌우하기 때문이다.**
+    FastAPI 는 등록 순서대로 매칭하므로 SPA catch-all 이 먼저 등록되면 그 뒤의
+    라우트가 전부 삼켜진다. 실제로 /healthz 가 index.html 을 돌려주어 컨테이너가
+    unhealthy 로 떨어진 적이 있다.
+
+    모듈 최상위에 늘어놓으면 그 순서가 파일 편집으로 쉽게 깨지고, 테스트가
+    확인하려면 모듈을 reload 해야 한다. 함수 안에 모아두면 순서가 한눈에 보이고
+    테스트도 인자만 바꿔 앱을 새로 만들면 된다.
+    """
+    app = FastAPI(title="poogiegram", lifespan=lifespan)
+
+    app.include_router(auth_router)
+    app.include_router(assets_router)
+    app.include_router(ingest_router)
+
+    app.add_api_route("/healthz", healthz, methods=["GET"])
+    app.add_api_route("/readyz", readyz, methods=["GET"])
+
+    # 반드시 마지막이다 — 위 라우트를 모두 등록한 뒤에 붙인다.
+    _mount_spa(app, static_dir if static_dir is not None else default_static_dir())
+
+    return app
+
+
 async def healthz():
     """라이브니스 — 프로세스가 살아 있는지만 본다. 의존성을 확인하지 않는다."""
     return {"status": "ok"}
 
 
-@app.get("/readyz")
-async def readyz():
+async def readyz(request: Request):
     """레디니스 — 스토리지·DB·Redis 가 모두 정상이어야 트래픽을 받을 수 있다."""
     checks: dict[str, str] = {}
     healthy = True
 
+    app = request.app
     try:
         verify_storage(app.state.settings)
         checks["storage"] = "ok"
@@ -112,18 +131,17 @@ async def readyz():
     )
 
 
-# ── SPA 서빙 ─────────────────────────────────────────────────────────
-#
-# **이 블록은 파일 맨 끝에 있어야 한다.** FastAPI 는 등록 순서대로 매칭하므로
-# catch-all 을 먼저 등록하면 그 뒤에 정의된 라우트가 전부 삼켜진다.
-# 실제로 /healthz 가 index.html 을 돌려주어 헬스체크가 실패하고 컨테이너가
-# unhealthy 로 떨어진 적이 있다.
-#
-# 빌드 산출물이 있을 때만 붙인다. 개발 중에는 Vite 개발 서버가 담당하므로
-# 없어도 API 는 정상 동작해야 한다.
+def _mount_spa(app: FastAPI, static: Path) -> None:
+    """SPA 폴백을 붙인다. **호출 시점이 곧 우선순위다** — create_app 의 맨 끝에서 부른다.
 
-if _STATIC.is_dir():
-    app.mount("/assets", StaticFiles(directory=_STATIC / "assets"), name="spa-assets")
+    빌드 산출물이 있을 때만 붙인다. 개발 중에는 Vite 개발 서버가 담당하므로
+    없어도 API 는 정상 동작해야 한다.
+    """
+    if not static.is_dir():
+        log.warning("static/ 이 없습니다 — API 전용으로 동작합니다 (개발 모드)")
+        return
+
+    app.mount("/assets", StaticFiles(directory=static / "assets"), name="spa-assets")
 
     @app.get("/{path:path}", include_in_schema=False)
     async def spa(path: str):
@@ -131,10 +149,11 @@ if _STATIC.is_dir():
         # 없는 API 를 부르면 index.html 이 200 으로 돌아가 디버깅이 헷갈린다.
         if path.startswith("api/") or path in ("healthz", "readyz"):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "없는 경로입니다")
-        candidate = (_STATIC / path).resolve()
+        candidate = (static / path).resolve()
         # 경로 탈출 방지 — ../ 로 static 밖 파일을 읽지 못하게 한다
-        if path and candidate.is_file() and candidate.is_relative_to(_STATIC):
+        if path and candidate.is_file() and candidate.is_relative_to(static):
             return FileResponse(candidate)
-        return FileResponse(_STATIC / "index.html")
-else:
-    log.warning("static/ 이 없습니다 — API 전용으로 동작합니다 (개발 모드)")
+        return FileResponse(static / "index.html")
+
+
+app = create_app()

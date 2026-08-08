@@ -59,7 +59,7 @@ class Derived:
     display: str | None = None
 
 
-def _ensure_dir(path: Path) -> None:
+def _ensure_dir(path: Path, root: Path | None = None) -> None:
     """디렉터리를 만들고 그룹이 들어갈 수 있게 권한을 맞춘다.
 
     mkdir 의 mode 인자는 umask 에 깎이므로 만든 뒤 chmod 로 확정한다.
@@ -70,22 +70,31 @@ def _ensure_dir(path: Path) -> None:
     지금까지는 derived/ 루트의 setgid 가 아래로 전파돼 우연히 동작했을 뿐이라,
     루트의 비트 하나만 빠져도 조용히 무너지는 상태였다.
 
-    이미 있던 디렉터리는 건드리지 않는다 — derived/ 루트나 그 위의 권한을
+    root 를 주면 그 아래 모든 단계에 적용한다. 이미 있던 디렉터리도 고치는데,
+    권한 수정 이전 배포가 만들어 둔 0755 디렉터리가 그대로 남아 있으면 그 아래
+    새로 만드는 파일부터 다시 안 보이기 때문이다.
+
+    **root 자체와 그 위는 건드리지 않는다.** derived/ 루트나 /var/lib 의 권한을
     우리가 바꿀 이유가 없다.
     """
-    created: list[Path] = []
-    probe = path
-    while not probe.exists():
-        created.append(probe)
-        probe = probe.parent
-
     path.mkdir(parents=True, exist_ok=True)
 
-    for directory in reversed(created):
+    targets = [path]
+    if root is not None:
+        targets = []
+        probe = path
+        # root 에 닿을 때까지만 올라간다. 경계를 못 찾으면(경로가 root 밖이면)
+        # 루트까지 거슬러 올라가는 사고가 나므로 is_relative_to 로 먼저 막는다.
+        if path.is_relative_to(root):
+            while probe != root:
+                targets.append(probe)
+                probe = probe.parent
+
+    for directory in targets:
         try:
             directory.chmod(DERIVED_DIR_MODE)
         except (PermissionError, FileNotFoundError):
-            # 경쟁 상태로 다른 프로세스가 먼저 만들었을 수 있다. 접근만 되면 문제없다.
+            # 다른 소유자가 만들어 뒀거나 경쟁 상태. 접근만 되면 문제없다.
             pass
 
 
@@ -163,6 +172,10 @@ def generate(
     """썸네일·프리뷰(·표시용 사본)를 만들고 상대경로를 돌려준다."""
     out = derived_dir(derived_root, sha256)
     rel = f"{sha256[:2]}/{sha256[2:4]}/{sha256}"
+
+    # 해시 중간 단계까지 여기서 한 번에 확정한다. 아래 저장 경로들은 이미 만들어진
+    # 디렉터리를 쓰게 된다.
+    _ensure_dir(out, derived_root)
 
     tmp_poster: Path | None = None
     try:
