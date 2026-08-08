@@ -27,6 +27,35 @@ log = logging.getLogger("poogiegram.worker")
 _SCAN_LOCK = "ingest:scan:lock"
 
 
+async def _requeue_pending_derives(ctx) -> int:
+    """파생물이 아직 없는 자산을 다시 큐에 넣는다.
+
+    파생물 작업은 인제스트 시점에 한 번 큐잉되는데, 그 사이 워커가 죽거나 작업이
+    유실되면 자산이 pending 인 채로 영원히 남는다. HEIC 는 파생물이 없으면
+    **화면에 아무것도 안 보이므로** 조용히 방치되면 안 된다.
+
+    job_id 를 자산 ID 로 고정해 중복 큐잉을 막는다.
+    """
+    from sqlalchemy import select
+
+    from .models import Asset
+
+    async with ctx["sessionmaker"]() as session:
+        stale = (
+            await session.scalars(
+                select(Asset.id)
+                .where(Asset.derive_status == "pending", Asset.deleted_at.is_(None))
+                .limit(500)
+            )
+        ).all()
+
+    for asset_id in stale:
+        await ctx["redis"].enqueue_job("derive_asset", str(asset_id), _job_id=f"derive:{asset_id}")
+    if stale:
+        log.info("파생물 재큐잉: %d건", len(stale))
+    return len(stale)
+
+
 async def scan_drop_folder(ctx) -> dict:
     """드롭 폴더를 한 번 훑는다. 주기 루프와 수동 트리거가 같은 함수를 쓴다."""
     redis = ctx["redis"]
@@ -45,7 +74,8 @@ async def scan_drop_folder(ctx) -> dict:
             await redis.enqueue_job("ingest_file", str(c.path))
         for c in waiting:
             log.debug("  대기(안정성 미충족): %s", c.path.name)
-        return {"ready": len(ready), "waiting": len(waiting)}
+        requeued = await _requeue_pending_derives(ctx)
+        return {"ready": len(ready), "waiting": len(waiting), "requeued": requeued}
     finally:
         await redis.delete(_SCAN_LOCK)
 
@@ -69,7 +99,9 @@ async def ingest_file(ctx, path_str: str) -> dict:
     # 파생물은 별도 작업으로 분리한다. 인제스트(빠름)와 디코딩(느림)을 한 작업에
     # 묶으면 큐가 디코딩에 막혀 새 파일이 DB 에 늦게 나타난다.
     if result.event in ("ingested", "restored") and result.asset_id:
-        await ctx["redis"].enqueue_job("derive_asset", result.asset_id)
+        await ctx["redis"].enqueue_job(
+            "derive_asset", result.asset_id, _job_id=f"derive:{result.asset_id}"
+        )
     return {"event": result.event, "asset_id": result.asset_id}
 
 
