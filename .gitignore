@@ -22,6 +22,7 @@ venv/
 node_modules/
 web/dist/
 web/.vite/
+web/tsconfig.tsbuildinfo
 # 빌드 산출물 — Dockerfile 이 web/dist 에서 복사해 넣는다.
 backend/static/
 
