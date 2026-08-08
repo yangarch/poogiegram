@@ -22,6 +22,27 @@ def db_url(url: str) -> str:
     return urlunsplit(urlsplit(url)._replace(path=f"/{db_name(url)}"))
 
 
+def guard():
+    """DB 를 쓰는(그래서 테이블을 비우는) 테스트에 붙이는 pytestmark.
+
+    운영 DB 를 가리킨 채 돌면 사진이 전부 사라진다. Makefile 이 실수로
+    되돌아가도 여기서 걸리도록 테스트 쪽에도 방어를 둔다.
+    """
+    import pytest
+
+    url = os.environ.get("DATABASE_URL")
+    return [
+        pytest.mark.skipif(not url, reason="DATABASE_URL 미설정"),
+        pytest.mark.skipif(
+            bool(url) and not (urlsplit(url).path.lstrip("/").endswith(SUFFIX)),
+            reason=(
+                f"DATABASE_URL 이 테스트용 DB 가 아닙니다 (이름이 '{SUFFIX}' 로 끝나야 합니다). "
+                "이 테스트들은 asset 테이블을 비웁니다.  make test-db 를 쓰세요."
+            ),
+        ),
+    ]
+
+
 if __name__ == "__main__":
     source = os.environ.get("DATABASE_URL")
     if not source:

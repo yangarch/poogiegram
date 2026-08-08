@@ -117,22 +117,37 @@ async def reindex() -> int:
 
     DB 만 잃고 원본이 남은 상황의 복구 수단이다. 파일은 옮기지 않는다.
     """
+    from arq import create_pool
+    from arq.connections import RedisSettings
+
     from .ingest.pipeline import reindex_all
 
     settings = get_settings()
     engine = make_engine(settings.database_url)
     try:
         maker = make_sessionmaker(engine)
-        counts = await reindex_all(maker, settings)
+        counts, new_ids = await reindex_all(maker, settings)
     finally:
         await engine.dispose()
 
     if not counts:
         print("originals/ 에 파일이 없습니다.")
         return 0
-    for status, n in sorted(counts.items()):
-        print(f"  {status:<10} {n}")
-    print("\n파생물은 워커가 만듭니다. 진행 상황:  make status-derive")
+
+    # 파생물 작업을 바로 큐에 넣는다. 주기 스캔에 맡기면 최대 5분 동안
+    # "등록은 됐는데 화면은 그대로"가 된다.
+    if new_ids:
+        redis = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+        try:
+            for asset_id in new_ids:
+                await redis.enqueue_job("derive_asset", asset_id)
+        finally:
+            await redis.aclose()
+
+    for event, n in sorted(counts.items()):
+        print(f"  {event:<10} {n}")
+    if new_ids:
+        print(f"\n파생물 {len(new_ids)}건을 큐에 넣었습니다. 진행 상황:  make status-derive")
     return 1 if counts.get("failed") else 0
 
 

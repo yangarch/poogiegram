@@ -377,12 +377,17 @@ async def reindex_file(session, settings: Settings, src: Path) -> Result:
     return Result("reindexed", str(asset.id), rel)
 
 
-async def reindex_all(sessionmaker, settings: Settings) -> dict[str, int]:
+async def reindex_all(sessionmaker, settings: Settings) -> tuple[dict[str, int], list[str]]:
     """originals/ 전체를 훑어 DB 에 없는 파일을 등록한다.
 
     이미 등록된 파일은 건너뛰므로 여러 번 돌려도 안전하다.
+
+    등록한 자산 id 를 함께 돌려준다 — 호출자가 파생물 작업을 큐에 넣어야 한다.
+    주기 스캔(300초)도 pending 을 다시 줍지만, 복구 상황에서 "등록은 됐는데
+    화면은 그대로"인 시간이 생기는 것은 좋지 않다.
     """
     counts: dict[str, int] = {}
+    new_ids: list[str] = []
     marker = ".poogiegram-ok"
 
     for path in sorted(settings.originals_dir.rglob("*")):
@@ -391,7 +396,10 @@ async def reindex_all(sessionmaker, settings: Settings) -> dict[str, int]:
         async with sessionmaker() as session:
             async with session.begin():
                 try:
-                    event = (await reindex_file(session, settings, path)).event
+                    result = await reindex_file(session, settings, path)
+                    event = result.event
+                    if event == "reindexed" and result.asset_id:
+                        new_ids.append(result.asset_id)
                 except FileProblem as exc:
                     log.warning("재색인 실패 %s — %s", path.name, exc)
                     event = "failed"
@@ -404,4 +412,4 @@ async def reindex_all(sessionmaker, settings: Settings) -> dict[str, int]:
     if paired:
         counts["paired"] = paired
 
-    return counts
+    return counts, new_ids
