@@ -76,4 +76,6 @@ export const assetUrl = {
   preview: (id: string) => `/api/assets/${id}/preview`,
   display: (id: string) => `/api/assets/${id}/display`,
   original: (id: string) => `/api/assets/${id}/original`,
+  /** 라이브 포토의 동반 클립. 정지컷 ID 로 요청한다 (§6.5) */
+  motion: (id: string) => `/api/assets/${id}/motion`,
 };

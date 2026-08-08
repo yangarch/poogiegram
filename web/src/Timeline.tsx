@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { api, assetUrl, type AssetItem } from "./api";
 import { layoutRows, widthsOf, type Row } from "./layout";
+import { Lightbox } from "./Lightbox";
 
 const GAP = 14;
 const TARGET_HEIGHT = 280;
@@ -51,10 +52,34 @@ function buildBlocks(items: AssetItem[], width: number): { blocks: Block[]; tota
   return { blocks, total: top };
 }
 
-function Tile({ item, width, height }: { item: AssetItem; width: number; height: number }) {
+function Tile({
+  item,
+  width,
+  height,
+  onOpen,
+}: {
+  item: AssetItem;
+  width: number;
+  height: number;
+  onOpen: () => void;
+}) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <div className="tile" style={{ width, height }} data-ready={item.ready}>
+    <div
+      className="tile"
+      style={{ width, height }}
+      data-ready={item.ready}
+      onClick={onOpen}
+      // 키보드로도 열려야 한다 — 그리드 전체가 마우스 전용이 되면 곤란하다
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
       {item.ready ? (
         <img
           src={assetUrl.thumb(item.id)}
@@ -84,6 +109,7 @@ export function Timeline() {
   const [width, setWidth] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const query = useInfiniteQuery({
     queryKey: ["assets"],
@@ -152,6 +178,7 @@ export function Timeline() {
                   item={item}
                   width={widthsOf(block.row)[i]}
                   height={block.height}
+                  onOpen={() => setOpenIndex(items.indexOf(item))}
                 />
               ))}
             </div>
@@ -160,6 +187,15 @@ export function Timeline() {
       </div>
 
       {query.isFetchingNextPage && <p className="notice">더 불러오는 중…</p>}
+
+      {openIndex !== null && (
+        <Lightbox
+          items={items}
+          index={openIndex}
+          onIndex={setOpenIndex}
+          onClose={() => setOpenIndex(null)}
+        />
+      )}
     </div>
   );
 }

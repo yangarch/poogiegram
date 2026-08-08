@@ -162,3 +162,119 @@ button.link:hover { color: var(--fg); background: var(--bg-raised); }
 .login button[type="submit"]:disabled { opacity: 0.5; cursor: default; }
 
 .error { margin: 4px 0 0; color: #e06c5b; font-size: 14px; text-align: center; }
+
+/* ── 라이트박스 (§7.1) ─────────────────────────────────────── */
+
+/* 배경은 거의 검정. 사진만 남기는 것이 목적이라 그리드보다 어둡게 간다. */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #0b0b0c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overscroll-behavior: contain;
+}
+
+.lb-surface {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* 브라우저 기본 제스처(당겨서 새로고침·핀치 확대)를 막아야 우리 조작이 산다 */
+  touch-action: none;
+  user-select: none;
+}
+
+.lb-stage {
+  display: grid;
+  place-items: center;
+  will-change: transform;
+}
+
+.lb-media {
+  display: block;
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+/* 썸네일을 확대해 깔아두는 층. 프리뷰가 오기 전의 빈 화면을 막는다. */
+.lb-base { position: absolute; filter: blur(12px); transform: scale(1.04); }
+.lb-hi { position: relative; opacity: 0; transition: opacity 200ms ease; }
+.lb-hi.loaded { opacity: 1; }
+.lb-motion { position: absolute; inset: 0; margin: auto; }
+
+/* 크롬은 사진 위에 떠 있으므로 최소화하고, 배경 그러데이션으로만 띄운다 */
+.lb-bar {
+  position: absolute;
+  left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  color: #f2f1ef;
+  font-size: 14px;
+  pointer-events: none;
+}
+.lb-top {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent);
+}
+.lb-meta { flex: 1; }
+.lb-meta em { font-style: normal; color: #a9a9ad; }
+.lb-count { color: #a9a9ad; font-variant-numeric: tabular-nums; }
+
+.lb-btn {
+  pointer-events: auto;
+  padding: 6px 12px;
+  color: #f2f1ef;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0;
+  border-radius: 7px;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.lb-btn:hover { background: rgba(255, 255, 255, 0.22); }
+
+.lb-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px; height: 52px;
+  display: grid; place-items: center;
+  font-size: 30px; line-height: 1;
+  color: #f2f1ef;
+  background: rgba(0, 0, 0, 0.35);
+  border: 0; border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.lightbox:hover .lb-nav { opacity: 0.75; }
+.lb-nav:hover { opacity: 1 !important; }
+.lb-prev { left: 16px; }
+.lb-next { right: 16px; }
+
+/* 터치 기기에는 화살표 대신 스와이프를 쓴다 — 손가락이 사진을 가린다 */
+@media (hover: none) {
+  .lb-nav { display: none; }
+}
+
+.lb-hint {
+  position: absolute;
+  bottom: 24px;
+  padding: 6px 12px;
+  font-size: 12px; letter-spacing: 0.04em;
+  color: #f2f1ef;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.tile { cursor: pointer; }
