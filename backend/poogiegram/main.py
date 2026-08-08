@@ -58,30 +58,7 @@ app.include_router(auth_router)
 app.include_router(assets_router)
 app.include_router(ingest_router)
 
-# ── SPA 서빙 ─────────────────────────────────────────────────────────
-# 빌드 산출물이 있을 때만 붙인다. 개발 중에는 Vite 개발 서버가 담당하므로
-# 없어도 API 는 정상 동작해야 한다.
 _STATIC = Path(__file__).resolve().parent.parent / "static"
-
-if _STATIC.is_dir():
-    app.mount("/assets", StaticFiles(directory=_STATIC / "assets"), name="spa-assets")
-
-    @app.get("/{path:path}", include_in_schema=False)
-    async def spa(path: str):
-        """클라이언트 라우팅을 위해 알 수 없는 경로도 index.html 로 돌려준다.
-
-        API 경로는 위에서 이미 처리되므로 여기까지 오지 않는다. 다만 없는 API 를
-        부르면 index.html 이 200 으로 돌아가 디버깅이 헷갈리므로 404 로 끊는다.
-        """
-        if path.startswith("api/"):
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "없는 API 경로입니다")
-        candidate = (_STATIC / path).resolve()
-        # 경로 탈출 방지 — ../ 로 static 밖 파일을 읽지 못하게 한다
-        if path and candidate.is_file() and candidate.is_relative_to(_STATIC):
-            return FileResponse(candidate)
-        return FileResponse(_STATIC / "index.html")
-else:
-    log.warning("static/ 이 없습니다 — API 전용으로 동작합니다 (개발 모드)")
 
 
 @app.get("/healthz")
@@ -128,3 +105,31 @@ async def readyz():
         status_code=200 if healthy else 503,
         content={"status": "ok" if healthy else "unavailable", "checks": checks},
     )
+
+
+# ── SPA 서빙 ─────────────────────────────────────────────────────────
+#
+# **이 블록은 파일 맨 끝에 있어야 한다.** FastAPI 는 등록 순서대로 매칭하므로
+# catch-all 을 먼저 등록하면 그 뒤에 정의된 라우트가 전부 삼켜진다.
+# 실제로 /healthz 가 index.html 을 돌려주어 헬스체크가 실패하고 컨테이너가
+# unhealthy 로 떨어진 적이 있다.
+#
+# 빌드 산출물이 있을 때만 붙인다. 개발 중에는 Vite 개발 서버가 담당하므로
+# 없어도 API 는 정상 동작해야 한다.
+
+if _STATIC.is_dir():
+    app.mount("/assets", StaticFiles(directory=_STATIC / "assets"), name="spa-assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str):
+        """클라이언트 라우팅을 위해 알 수 없는 경로도 index.html 로 돌려준다."""
+        # 없는 API 를 부르면 index.html 이 200 으로 돌아가 디버깅이 헷갈린다.
+        if path.startswith("api/") or path in ("healthz", "readyz"):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "없는 경로입니다")
+        candidate = (_STATIC / path).resolve()
+        # 경로 탈출 방지 — ../ 로 static 밖 파일을 읽지 못하게 한다
+        if path and candidate.is_file() and candidate.is_relative_to(_STATIC):
+            return FileResponse(candidate)
+        return FileResponse(_STATIC / "index.html")
+else:
+    log.warning("static/ 이 없습니다 — API 전용으로 동작합니다 (개발 모드)")
