@@ -837,7 +837,7 @@ Match User <drop-user>
 
 ```bash
 sudo groupadd -f poogiegram
-sudo useradd -M -d /mnt/media/incoming -s /usr/sbin/nologin -G poogiegram <drop-user>
+sudo useradd -M -d /drop -s /usr/sbin/nologin -G poogiegram <drop-user>   # 홈은 chroot 기준 경로
 
 sudo chown root:root /mnt/media /mnt/media/incoming   # ← 함정 1
 sudo chmod 755       /mnt/media /mnt/media/incoming
@@ -1246,7 +1246,7 @@ HEVC라도 그대로 두고, 재생이 안 되는 브라우저에서는 정지�
 | 단계 | 내용 | 완료 기준 |
 |---|---|---|
 | ~~**M0**~~ | 저장소·Docker Compose 골격, 헬스체크 | ✅ **완료** — 전 스택 기동, readyz 통과 |
-| **M1** | **드롭 폴더 인제스트**(SFTP + 주기 스캔) + HEIC→display.jpg + 썸네일 (UI 없음) | 폴더에 던져 넣으면 DB·파생물이 생기고 `incoming/`이 비워진다 |
+| ~~**M1**~~ | 드롭 폴더 인제스트 + HEIC→display.jpg + 썸네일 (UI 없음) | ✅ **완료** — 실측 검증 (라이브 포토 페어링 포함) |
 | **M2** | 인증 + 타임라인 그리드 + 라이트박스 | 로그인 후 아이폰 사진을 브라우저에서 본다 |
 | **M3** | 동영상 (HEVC HLS 트랜스코딩 + **Dolby Vision 톤매핑**) + HW 가속 | 아이폰 4K 영상이 색 왜곡 없이 재생된다 |
 | **M3.5** | 라이브 포토 페어링 **[확정 범위]** | 사진 1장으로 표시되고 길게 눌러 모션 재생 |
