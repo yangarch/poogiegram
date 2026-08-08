@@ -41,6 +41,16 @@ status: ## 헬스체크 확인
 	curl -sS --max-time 3 http://127.0.0.1:$$port/readyz || true; \
 	exit 1
 
+migrate: ## DB 마이그레이션 적용
+	$(DC) exec api alembic upgrade head
+	@echo
+	@$(MAKE) --no-print-directory status
+
+migration: ## 새 마이그레이션 생성 (M="설명")
+	@test -n "$(M)" || { echo 'M="설명" 을 지정하세요. 예: make migration M="add caption"'; exit 1; }
+	$(DC) exec api alembic revision --autogenerate -m "$(M)"
+	@echo "생성된 파일을 반드시 눈으로 확인하세요 — autogenerate 가 놓치는 것이 있습니다"
+
 shell: ## api 컨테이너 셸
 	$(DC) exec api bash
 
@@ -55,4 +65,4 @@ dump: ## pg_dump → $(MEDIA_ROOT)/db/ (§4.2)
 		> $${MEDIA_ROOT:-/mnt/media}/db/$$(date +%F-%H%M).dump
 	@echo "덤프 완료: $${MEDIA_ROOT:-/mnt/media}/db/"
 
-.PHONY: help up down logs ps status shell psql vainfo dump
+.PHONY: help up down logs ps status migrate migration shell psql vainfo dump

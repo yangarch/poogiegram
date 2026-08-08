@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy import text
 
 from .config import get_settings
+from .db import make_engine, make_sessionmaker
 from .storage import StorageNotReady, ensure_runtime_dirs, verify_storage
 
 log = logging.getLogger("poogiegram")
@@ -25,8 +25,8 @@ async def lifespan(app: FastAPI):
     ensure_runtime_dirs(settings)
 
     app.state.settings = settings
-    app.state.engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    app.state.sessionmaker = async_sessionmaker(app.state.engine, expire_on_commit=False)
+    app.state.engine = make_engine(settings.database_url)
+    app.state.sessionmaker = make_sessionmaker(app.state.engine)
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
 
     log.info("poogiegram 기동 — media=%s derived=%s", settings.media_root, settings.derived_root)
@@ -60,8 +60,11 @@ async def readyz():
 
     try:
         async with app.state.sessionmaker() as session:
-            await session.execute(text("SELECT 1"))
-        checks["database"] = "ok"
+            # 연결만이 아니라 마이그레이션이 적용됐는지도 본다.
+            # 스키마가 없으면 "DB 는 살아있는데 앱은 아무것도 못 하는" 상태가 되는데,
+            # SELECT 1 만으로는 그걸 구분할 수 없다.
+            rev = await session.scalar(text("SELECT version_num FROM alembic_version"))
+        checks["database"] = f"ok (migration {rev})"
     except Exception as exc:  # noqa: BLE001 — 원인을 그대로 보여주는 편이 진단에 낫다
         checks["database"] = f"{type(exc).__name__}: {exc}"
         healthy = False

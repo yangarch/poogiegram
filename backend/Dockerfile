@@ -40,6 +40,8 @@ WORKDIR /app
 COPY requirements.txt requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
 
+COPY alembic.ini ./
+COPY migrations ./migrations
 COPY poogiegram ./poogiegram
 
 # 비루트로 실행. worker 는 compose 에서 group_add 로 render 그룹을 추가로 받는다.

@@ -55,8 +55,12 @@ getent group render | cut -d: -f3       # RENDER_GID 에 넣는다
 
 ```bash
 make up
+make migrate     # DB 스키마 적용 (최초 1회, 이후 스키마 변경 시)
 make status
 ```
+
+`readyz` 의 `database` 항목에 `ok (migration 0001)` 처럼 리비전이 함께 표시된다 —
+연결만 되고 스키마가 없는 상태를 구분하기 위해서다.
 
 `/dev/dri`가 있으면 VA-API 오버레이가 자동으로 적용된다.
 
