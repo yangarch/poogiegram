@@ -40,7 +40,26 @@ sudo touch /mnt/media/originals/.poogiegram-ok
 마커 파일이 없으면 앱이 기동을 거부한다. 외장 디스크가 마운트되지 않은 채로 떠서
 빈 디렉터리에 원본을 쌓는 사고를 막기 위한 것이다.
 
-**2. 환경 설정**
+**2. 공용 그룹과 권한**
+
+업로드하는 사람과 컨테이너 안의 워커가 같은 파일을 다뤄야 한다. 공용 그룹으로 묶는다.
+
+```bash
+sudo groupadd -f poogiegram
+sudo usermod -aG poogiegram $USER          # 업로드할 계정
+sudo chown -R root:poogiegram /mnt/media
+sudo chmod 2775 /mnt/media/{originals,trash,db,.tmp} /mnt/media/incoming/{drop,failed}
+sudo chmod 755  /mnt/media /mnt/media/incoming
+```
+
+`2775` 의 setgid 비트가 핵심이다 — 새로 만들어지는 파일이 `poogiegram` 그룹을 상속해서,
+올린 사람과 워커가 같은 그룹으로 접근하게 된다.
+`/mnt/media` 와 `incoming` 을 `755` 로 두는 것은 SFTP chroot 조건 때문이다
+(chroot 대상과 그 상위 경로는 root 소유에 그룹 쓰기 권한이 없어야 한다).
+
+**그룹 추가는 새 세션부터 적용된다** — SSH·SFTP 를 끊고 다시 접속해야 한다.
+
+**3. 환경 설정**
 
 ```bash
 cp .env.example .env
@@ -51,7 +70,7 @@ getent group render | cut -d: -f3       # RENDER_GID 에 넣는다
 `RENDER_GID`가 틀리면 컨테이너 안에서만 GPU 접근이 `Permission denied`로 막히고
 호스트에서는 정상 동작해서 원인을 찾기 어렵다.
 
-**3. 기동**
+**4. 기동**
 
 ```bash
 make up          # 빌드 → 기동 → 마이그레이션 → 상태 확인까지 한 번에
@@ -62,7 +81,7 @@ make up          # 빌드 → 기동 → 마이그레이션 → 상태 확인까
 
 `/dev/dri`가 있으면 VA-API 오버레이가 자동으로 적용된다.
 
-**4. nginx (외부 접속이 필요할 때)**
+**5. nginx (외부 접속이 필요할 때)**
 
 ```bash
 sudo cp deploy/nginx/poogiegram.conf.example /etc/nginx/sites-available/poogiegram.conf

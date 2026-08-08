@@ -12,6 +12,9 @@ x-backend: &backend
   volumes:
     - ${MEDIA_ROOT}:/data/media
     - ${DERIVED_ROOT}:/data/derived
+  # 호스트의 poogiegram 그룹 자격. 없으면 originals/ 에 파일을 옮길 수 없다 (§6.1).
+  group_add:
+    - "${POOGIEGRAM_GID}"
   depends_on:
     db:
       condition: service_healthy

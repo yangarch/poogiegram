@@ -11,5 +11,7 @@ services:
   worker:
     devices:
       - /dev/dri:/dev/dri
+    # compose 는 group_add 리스트를 '병합'한다 — 베이스의 POOGIEGRAM_GID 에 이어 붙는다.
+    # 여기 다시 적으면 중복으로 판정돼 설정 검증에서 거부된다.
     group_add:
       - "${RENDER_GID}"
