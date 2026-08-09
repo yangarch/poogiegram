@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from .deps import current_user
-from .models import Asset
+from .models import Asset, AssetTag
 
 log = logging.getLogger("poogiegram.assets")
 
@@ -67,6 +67,7 @@ async def list_assets(
     limit: int = Query(100, ge=1, le=PAGE_SIZE_MAX),
     cursor: str | None = None,
     favorites: bool = False,
+    tag_id: str | None = None,
 ) -> dict:
     """타임라인. 커서 기반이라 스크롤 중 새 자산이 들어와도 밀리지 않는다.
 
@@ -86,6 +87,14 @@ async def list_assets(
     )
     if favorites:
         stmt = stmt.where(Asset.is_favorite.is_(True))
+    if tag_id:
+        # 태그로 거른다 (§5.5). EXISTS 를 쓰는 이유는 조인이 행을 부풀리지 않게
+        # 하기 위해서다 — 커서 페이지네이션은 행 수가 정확해야 한다.
+        stmt = stmt.where(
+            select(AssetTag.asset_id)
+            .where(AssetTag.asset_id == Asset.id, AssetTag.tag_id == tag_id)
+            .exists()
+        )
     if cursor:
         taken_at, asset_id = _decode_cursor(cursor)
         stmt = stmt.where(

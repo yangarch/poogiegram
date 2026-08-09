@@ -17,7 +17,7 @@ from . import logs
 from .config import get_settings
 from .db import make_engine, make_sessionmaker
 from .ingest.derive import DeriveError, generate
-from .ingest.pipeline import ingest_one, repair_pairings
+from .ingest.pipeline import ingest_one, prune_empty_dirs, repair_pairings
 from .ingest.scanner import scan
 from .storage import ensure_runtime_dirs, verify_storage
 
@@ -90,6 +90,11 @@ async def scan_drop_folder(ctx) -> dict:
                 repaired = await repair_pairings(session)
         if repaired:
             log.info("라이브 포토 페어링 보정: %d건", repaired)
+
+        # 인제스트로 비워진 폴더를 치운다 (§5.5). 대기 중인 파일이 없을 때만 —
+        # 아직 올라오는 중인 폴더를 지우면 업로드가 깨진다.
+        if not waiting:
+            prune_empty_dirs(settings.drop_dir)
         return {
             "ready": len(ready),
             "waiting": len(waiting),

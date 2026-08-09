@@ -23,6 +23,13 @@ export interface AssetItem {
   ready: boolean;
 }
 
+export interface TagItem {
+  id: string;
+  name: string;
+  /** 이 태그로 열리는 사진 수. 빈 태그가 쌓이는 것을 눈으로 확인할 수 있어야 한다 */
+  count: number;
+}
+
 export interface AssetPage {
   items: AssetItem[];
   next_cursor: string | null;
@@ -64,10 +71,17 @@ export const api = {
 
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
 
-  assets: (cursor: string | null, limit = 120) => {
+  assets: (cursor: string | null, tagId: string | null = null, limit = 120) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
+    if (tagId) params.set("tag_id", tagId);
     return request<AssetPage>(`/api/assets?${params}`);
+  },
+
+  tags: (q?: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    return request<{ items: TagItem[] }>(`/api/tags?${params}`);
   },
 };
 

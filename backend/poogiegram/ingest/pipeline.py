@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from ..config import Settings
-from ..models import Asset, IngestLog
+from ..models import Asset, AssetTag, IngestLog, Tag
 from . import dates, metadata
 
 log = logging.getLogger("poogiegram.ingest")
@@ -251,6 +252,75 @@ def _build_asset(
     )
 
 
+# ── 태그 (§5.5) ──────────────────────────────────────────────────────
+#
+# 드롭 폴더의 하위 폴더 이름이 태그가 된다. 스캐너는 이미 하위 폴더를 훑고 있었지만
+# 배치 기준이 EXIF 촬영일이라 폴더 이름을 버리고 있었다 — 읽고 있던 정보를 쓸 뿐이다.
+
+TAG_NAME_MAX = 60
+
+
+def tag_names_from(src: Path, drop_dir: Path) -> list[str]:
+    """드롭 루트 기준 상대 경로의 **각 폴더 단계**를 태그 이름으로 만든다.
+
+    마지막 폴더만 쓰면 서로 다른 해의 "생일"이 한 태그로 합쳐지고, 경로를 통째로
+    한 이름으로 만들면 "결혼기념일" 전체를 볼 수 없다 (§5.5).
+    """
+    try:
+        parts = src.relative_to(drop_dir).parts[:-1]
+    except ValueError:
+        # 드롭 폴더 밖에서 부른 경우(재색인 등). 경로에서 태그를 뽑지 않는다.
+        return []
+
+    names: list[str] = []
+    for part in parts:
+        name = " ".join(part.split())      # 앞뒤 공백 제거 + 내부 연속 공백 축약
+        if not name or name.startswith("."):
+            continue
+        names.append(name[:TAG_NAME_MAX])
+    return names
+
+
+async def attach_tags(session, asset: Asset, names: list[str]) -> None:
+    """태그를 찾거나 만들어 자산에 붙인다.
+
+    동시에 같은 폴더의 파일 여러 개가 들어오면 같은 이름을 동시에 만들려 한다.
+    unique 제약이 잡아주므로, 충돌하면 다시 조회해서 이미 만들어진 것을 쓴다.
+    """
+    for name in dict.fromkeys(names):      # 중복 제거, 순서 유지
+        tag = await session.scalar(select(Tag).where(Tag.name == name))
+        if tag is None:
+            tag = Tag(name=name)
+            session.add(tag)
+            try:
+                await session.flush()
+            except IntegrityError:
+                await session.rollback()
+                tag = await session.scalar(select(Tag).where(Tag.name == name))
+                if tag is None:
+                    raise
+        session.add(AssetTag(asset_id=asset.id, tag_id=tag.id))
+        await session.flush()
+
+
+def prune_empty_dirs(drop_dir: Path) -> None:
+    """인제스트로 비워진 하위 디렉터리를 치운다 (§5.5).
+
+    두지 않으면 SFTP 로 접속했을 때 지난 폴더가 계속 쌓여 다음 업로드에 방해가 된다.
+    드롭 루트 자체는 남긴다 — 없으면 업로드할 곳이 사라진다.
+    """
+    if not drop_dir.is_dir():
+        return
+    # 깊은 곳부터 지워야 상위가 함께 비워진다
+    for path in sorted(drop_dir.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if not path.is_dir():
+            continue
+        try:
+            path.rmdir()               # 비어 있을 때만 성공한다
+        except OSError:
+            pass
+
+
 async def ingest_file(session, settings: Settings, src: Path) -> Result:
     """파일 하나를 인제스트한다. 예외를 던지지 않고 Result 로 돌려준다."""
     name = src.name
@@ -295,8 +365,13 @@ async def ingest_file(session, settings: Settings, src: Path) -> Result:
     session.add(asset)
     await session.flush()
 
+    # 파일을 옮기기 전에 경로에서 태그를 뽑는다 — 옮기고 나면 폴더 정보가 사라진다.
+    tags = tag_names_from(src, settings.drop_dir)
+
     move_into_place(src, settings.originals_dir / rel)
     await _pair_live_photo(session, asset)
+    if tags:
+        await attach_tags(session, asset, tags)
 
     return Result("ingested", str(asset.id), rel)
 

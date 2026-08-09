@@ -216,6 +216,10 @@ class AssetTag(Base):
         ForeignKey("tag.id", ondelete="CASCADE"), primary_key=True
     )
 
+    # PK 는 (asset_id, tag_id) 라 tag_id 만으로는 인덱스를 못 탄다. 태그로 거르는
+    # 것이 주된 사용법인데(§5.5), 그대로 두면 사진이 늘수록 전체 훑기가 된다.
+    __table_args__ = (Index("ix_asset_tag_by_tag", "tag_id", "asset_id"),)
+
 
 class ShareLink(Base):
     """앨범 또는 자산 중 정확히 하나를 가리킨다."""

@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "./api";
+import { api, ApiError, type TagItem } from "./api";
 import { Login } from "./Login";
+import { TagPicker } from "./TagPicker";
 import { Timeline } from "./Timeline";
 
 export function App() {
   const qc = useQueryClient();
+  const [tag, setTag] = useState<TagItem | null>(null);
   const me = useQuery({
     queryKey: ["me"],
     queryFn: api.me,
@@ -24,13 +27,14 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <strong>poogiegram</strong>
+        <TagPicker selected={tag} onSelect={setTag} />
         <span className="spacer" />
         <span className="who">{me.data.display_name}</span>
         <button className="link" onClick={() => logout.mutate()}>
           로그아웃
         </button>
       </header>
-      <Timeline />
+      <Timeline tagId={tag?.id ?? null} />
     </div>
   );
 }

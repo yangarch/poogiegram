@@ -20,6 +20,7 @@ from .db import make_engine, make_sessionmaker
 from .routes_assets import router as assets_router
 from .routes_auth import router as auth_router
 from .routes_ingest import router as ingest_router
+from .routes_tags import router as tags_router
 from .storage import StorageNotReady, ensure_runtime_dirs, verify_storage
 
 log = logging.getLogger("poogiegram")
@@ -76,6 +77,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(assets_router)
     app.include_router(ingest_router)
+    app.include_router(tags_router)
 
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/readyz", readyz, methods=["GET"])

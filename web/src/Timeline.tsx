@@ -104,7 +104,7 @@ function Tile({
   );
 }
 
-export function Timeline() {
+export function Timeline({ tagId }: { tagId: string | null }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -112,8 +112,10 @@ export function Timeline() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const query = useInfiniteQuery({
-    queryKey: ["assets"],
-    queryFn: ({ pageParam }) => api.assets(pageParam as string | null),
+    // 태그를 키에 넣어야 바꿀 때 목록이 새로 시작한다. 빼면 이전 태그의 페이지가
+    // 남아 섞인다.
+    queryKey: ["assets", tagId],
+    queryFn: ({ pageParam }) => api.assets(pageParam as string | null, tagId),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
   });
@@ -158,7 +160,7 @@ export function Timeline() {
       {query.isPending && <p className="notice">불러오는 중…</p>}
       {!query.isPending && items.length === 0 && (
         <p className="notice">
-          아직 사진이 없습니다.
+          {tagId ? "이 태그에 사진이 없습니다." : "아직 사진이 없습니다."}
           <br />
           드롭 폴더에 넣으면 자동으로 들어옵니다.
         </p>
