@@ -186,6 +186,7 @@ button.link:hover { color: var(--fg); background: var(--bg-raised); }
   /* 브라우저 기본 제스처(당겨서 새로고침·핀치 확대)를 막아야 우리 조작이 산다 */
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .lb-stage {
@@ -200,6 +201,13 @@ button.link:hover { color: var(--fg); background: var(--bg-raised); }
   max-height: 100vh;
   object-fit: contain;
   -webkit-user-drag: none;
+
+  /* iOS 사파리는 이미지를 길게 누르면 시스템 메뉴(공유·사진 앱에 저장)를 띄운다.
+     라이브 포토 재생 제스처와 정면으로 부딪혀서, 아이폰에서는 재생 대신 메뉴가
+     떴다. 이 속성이 그 가로채기를 끈다. 내려받기는 상단 버튼으로 한다. */
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* 썸네일을 확대해 깔아두는 층. 프리뷰가 오기 전의 빈 화면을 막는다. */

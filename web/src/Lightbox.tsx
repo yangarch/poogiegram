@@ -102,6 +102,8 @@ export function Lightbox({ items, index, onIndex, onClose }: Props) {
   const drag = useRef<{ x: number; y: number; tx: number; ty: number; moved: boolean } | null>(null);
   const pinch = useRef<{ distance: number; scale: number } | null>(null);
   const longPress = useRef<number | null>(null);
+  /** contextmenu 를 터치에서만 막기 위해 기억한다 — 데스크톱 우클릭은 살려둔다 */
+  const lastPointerType = useRef<string>("mouse");
 
   const cancelLongPress = () => {
     if (longPress.current !== null) {
@@ -111,6 +113,7 @@ export function Lightbox({ items, index, onIndex, onClose }: Props) {
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    lastPointerType.current = e.pointerType;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     drag.current = { x: e.clientX, y: e.clientY, tx: transform.x, ty: transform.y, moved: false };
@@ -209,6 +212,12 @@ export function Lightbox({ items, index, onIndex, onClose }: Props) {
         onPointerCancel={onPointerUp}
         onTouchMove={onTouchMove}
         onTouchEnd={() => (pinch.current = null)}
+        // iOS 사파리는 길게 누르면 공유·저장 메뉴를 띄운다. CSS 의 touch-callout
+        // 만으로 안 잡히는 버전이 있어 여기서도 막는다. 라이브 포토 재생 제스처와
+        // 부딪히기 때문이다. 마우스 우클릭은 그대로 둔다 — 막을 이유가 없다.
+        onContextMenu={(e) => {
+          if (lastPointerType.current !== "mouse") e.preventDefault();
+        }}
         onDoubleClick={() =>
           setTransform((t) => (t.scale > 1.01 ? IDENTITY : { scale: 2.5, x: 0, y: 0 }))
         }
