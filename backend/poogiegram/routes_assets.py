@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 
 from .deps import current_user
-from .models import Asset, AssetTag
+from .models import Asset, AssetTag, Tag
 
 log = logging.getLogger("poogiegram.assets")
 
@@ -42,7 +42,30 @@ def _decode_cursor(raw: str) -> tuple[dt.datetime, str]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "커서 형식이 올바르지 않습니다") from exc
 
 
-def _serialize(a: Asset) -> dict:
+async def _tags_for(session, assets: list[Asset]) -> dict:
+    """여러 자산의 태그를 **한 번에** 가져온다.
+
+    자산마다 조회하면 120장 목록에 쿼리가 121개 나간다. 목록 응답에 태그를 싣는
+    이유는 라이트박스에서 "이 사진에 뭐가 붙어 있지"를 볼 수 있어야 하기 때문이다.
+    """
+    if not assets:
+        return {}
+    rows = (
+        await session.execute(
+            select(AssetTag.asset_id, Tag.id, Tag.name)
+            .join(Tag, Tag.id == AssetTag.tag_id)
+            .where(AssetTag.asset_id.in_([a.id for a in assets]))
+            .order_by(Tag.name)
+        )
+    ).all()
+
+    by_asset: dict = {}
+    for asset_id, tag_id, name in rows:
+        by_asset.setdefault(asset_id, []).append({"id": str(tag_id), "name": name})
+    return by_asset
+
+
+def _serialize(a: Asset, tags: list | None = None) -> dict:
     return {
         "id": str(a.id),
         "kind": a.kind,
@@ -58,6 +81,7 @@ def _serialize(a: Asset) -> dict:
         "date_source": a.date_source,
         # 파생물이 아직 없으면 화면에 아무것도 못 띄운다. UI 가 자리표시자를 보여야 한다.
         "ready": a.derive_status == "ready",
+        "tags": tags or [],
     }
 
 
@@ -103,12 +127,13 @@ async def list_assets(
         )
 
     async with request.app.state.sessionmaker() as session:
-        rows = (await session.scalars(stmt)).all()
+        rows = list((await session.scalars(stmt)).all())
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        tags = await _tags_for(session, rows)
 
-    has_more = len(rows) > limit
-    rows = rows[:limit]
     return {
-        "items": [_serialize(a) for a in rows],
+        "items": [_serialize(a, tags.get(a.id)) for a in rows],
         "next_cursor": _encode_cursor(rows[-1].taken_at, rows[-1].id) if has_more and rows else None,
     }
 

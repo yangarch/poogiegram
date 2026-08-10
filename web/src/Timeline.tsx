@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { api, assetUrl, type AssetItem } from "./api";
 import { layoutRows, widthsOf, type Row } from "./layout";
 import { Lightbox } from "./Lightbox";
@@ -123,6 +123,7 @@ export function Timeline({
   onExitSelect: () => void;
 }) {
   const tagId = tag?.id ?? null;
+  const qc = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -153,6 +154,23 @@ export function Timeline({
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
   });
+
+  // 태그가 바뀐 사진만 캐시에서 갈아끼운다. 전체를 다시 불러오면 스크롤이 튀고,
+  // 태그로 거르는 중이면 보던 사진이 목록에서 사라져 라이트박스가 닫힌다.
+  const patchTags = (assetId: string, tags: AssetItem["tags"]) =>
+    qc.setQueryData(["assets", tagId], (old: any) =>
+      old
+        ? {
+            ...old,
+            pages: old.pages.map((page: any) => ({
+              ...page,
+              items: page.items.map((it: AssetItem) =>
+                it.id === assetId ? { ...it, tags } : it,
+              ),
+            })),
+          }
+        : old,
+    );
 
   const items = useMemo(
     () => query.data?.pages.flatMap((p) => p.items) ?? [],
@@ -244,6 +262,7 @@ export function Timeline({
           index={openIndex}
           onIndex={setOpenIndex}
           onClose={() => setOpenIndex(null)}
+          onTagsChanged={patchTags}
         />
       )}
     </div>

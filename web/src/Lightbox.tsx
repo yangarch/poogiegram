@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { assetUrl, type AssetItem } from "./api";
+import { TagEditor } from "./TagEditor";
 
 /** 이 배율을 넘어가면 프리뷰가 뭉개지기 시작한다 */
 const ESCALATE_AT = 1.2;
@@ -25,6 +26,7 @@ interface Props {
   index: number;
   onIndex: (next: number) => void;
   onClose: () => void;
+  onTagsChanged: (assetId: string, tags: AssetItem["tags"]) => void;
 }
 
 interface Transform {
@@ -42,7 +44,7 @@ function formatDate(iso: string): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${time}`;
 }
 
-export function Lightbox({ items, index, onIndex, onClose }: Props) {
+export function Lightbox({ items, index, onIndex, onClose, onTagsChanged }: Props) {
   const item = items[index];
   const [transform, setTransform] = useState<Transform>(IDENTITY);
   const [hiLoaded, setHiLoaded] = useState(false);
@@ -299,8 +301,17 @@ export function Lightbox({ items, index, onIndex, onClose }: Props) {
         </button>
       )}
 
-      {item.has_motion && !zoomed && (
-        <span className="lb-hint">{playingMotion ? "LIVE 재생 중" : "길게 눌러 LIVE 재생"}</span>
+      {/* 확대 중에는 감춘다 — 사진을 자세히 보려는 참에 크롬이 겹치면 방해가 된다 */}
+      {!zoomed && (
+        <div className="lb-bar lb-bottom">
+          <TagEditor item={item} onChanged={onTagsChanged} />
+          <span className="spacer" />
+          {item.has_motion && (
+            <span className="lb-hint-inline">
+              {playingMotion ? "LIVE 재생 중" : "길게 눌러 LIVE 재생"}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

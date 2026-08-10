@@ -21,6 +21,8 @@ export interface AssetItem {
   date_source: string;
   /** 파생물이 아직 없으면 화면에 띄울 이미지가 없다 (§6.2) */
   ready: boolean;
+  /** 이 사진에 붙은 태그. 라이트박스에서 보고 뗄 수 있어야 한다 (§5.3) */
+  tags: { id: string; name: string }[];
 }
 
 export interface TagItem {
