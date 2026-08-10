@@ -78,6 +78,45 @@ export const api = {
     return request<AssetPage>(`/api/assets?${params}`);
   },
 
+  /**
+   * 파일 하나를 올린다.
+   *
+   * fetch 는 업로드 진행률을 알려주지 않는다. 진행률이 없으면 큰 파일에서 멈춘
+   * 건지 올라가는 중인지 구분이 안 돼 사용자가 취소해버린다. XHR 만 upload.progress
+   * 를 준다.
+   */
+  upload: (file: File, tag: string | null, onProgress?: (ratio: number) => void) =>
+    new Promise<{ filename: string; bytes: number }>((resolve, reject) => {
+      const body = new FormData();
+      body.append("file", file);
+      if (tag) body.append("tag", tag);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/upload");
+      xhr.withCredentials = true;
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText));
+          return;
+        }
+        let detail = `업로드 실패 (${xhr.status})`;
+        try {
+          const parsed = JSON.parse(xhr.responseText);
+          if (typeof parsed.detail === "string") detail = parsed.detail;
+        } catch {
+          /* 본문이 JSON 이 아닐 수 있다 */
+        }
+        reject(new ApiError(xhr.status, detail));
+      };
+      xhr.onerror = () => reject(new ApiError(0, "연결이 끊겼습니다"));
+      xhr.ontimeout = () => reject(new ApiError(0, "시간이 초과됐습니다"));
+      xhr.send(body);
+    }),
+
   tags: (q?: string) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);

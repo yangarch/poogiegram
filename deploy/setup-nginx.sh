@@ -103,8 +103,10 @@ server {
     listen [::]:80;
     server_name $DOMAIN;
 
-    # 청크 업로드 단위 기준. 원본 파일 크기가 아니라 청크 크기다 (§6.6).
-    client_max_body_size 64m;
+    # 웹 업로드는 파일 하나당 요청 하나다 (§6.6). 그래서 이 값은 **가장 큰 파일
+    # 하나**를 담을 수 있어야 한다. 스냅사진 원본이 80MB, 아이폰 4K 영상은 그 이상
+    # 이라 넉넉히 잡는다. 넘으면 nginx 가 413 을 내고 앱 로그에는 아무것도 안 남는다.
+    client_max_body_size 2g;
 
     location / {
         proxy_pass http://127.0.0.1:$API_PORT;

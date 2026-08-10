@@ -4,10 +4,12 @@ import { api, ApiError, type TagItem } from "./api";
 import { Login } from "./Login";
 import { TagPicker } from "./TagPicker";
 import { Timeline } from "./Timeline";
+import { Upload } from "./Upload";
 
 export function App() {
   const qc = useQueryClient();
   const [tag, setTag] = useState<TagItem | null>(null);
+  const [uploading, setUploading] = useState(false);
   const me = useQuery({
     queryKey: ["me"],
     queryFn: api.me,
@@ -29,12 +31,16 @@ export function App() {
         <strong>poogiegram</strong>
         <TagPicker selected={tag} onSelect={setTag} />
         <span className="spacer" />
+        <button className="link" onClick={() => setUploading(true)}>
+          올리기
+        </button>
         <span className="who">{me.data.display_name}</span>
         <button className="link" onClick={() => logout.mutate()}>
           로그아웃
         </button>
       </header>
       <Timeline tagId={tag?.id ?? null} />
+      {uploading && <Upload tag={tag} onClose={() => setUploading(false)} />}
     </div>
   );
 }
