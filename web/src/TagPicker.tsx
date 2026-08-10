@@ -21,6 +21,7 @@ export function TagPicker({ selected, onSelect }: Props) {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<TagItem | null>(null);
   const [draft, setDraft] = useState("");
+  const [removing, setRemoving] = useState<TagItem | null>(null);
   const box = useRef<HTMLDivElement>(null);
 
   // 이미 있는 이름으로 바꾸면 서버가 병합한다 (§5.3). "합치기"를 따로 만들면
@@ -32,6 +33,21 @@ export function TagPicker({ selected, onSelect }: Props) {
       qc.invalidateQueries({ queryKey: ["assets"] });
       if (selected?.id === editing?.id) onSelect({ ...result, count: 0 });
       setEditing(null);
+    },
+  });
+
+  // 태그만 지운다. 사진은 그대로다.
+  //
+  // 개수가 0 이어도 자동으로 지우지 않는 이유: 마지막 사진을 지우면 휴지통으로
+  // 가서 개수는 0 이 되지만 asset_tag 연결은 살아 있다. 여기서 태그를 지우면
+  // CASCADE 로 연결까지 사라져 **사진을 복원해도 태그가 안 돌아온다.**
+  const removeTag = useMutation({
+    mutationFn: (id: string) => api.deleteTag(id),
+    onSuccess: (_r, id) => {
+      qc.invalidateQueries({ queryKey: ["tags"] });
+      qc.invalidateQueries({ queryKey: ["assets"] });
+      if (selected?.id === id) onSelect(null);   // 보고 있던 태그가 사라졌다
+      setRemoving(null);
     },
   });
 
@@ -117,6 +133,22 @@ export function TagPicker({ selected, onSelect }: Props) {
                     저장
                   </button>
                 </form>
+              ) : removing?.id === tag.id ? (
+                <div key={tag.id} className="tag-row tag-confirm">
+                  <span className="tag-name">
+                    {tag.count > 0 ? `${tag.count}장에서 떼고 삭제?` : "태그 삭제?"}
+                  </span>
+                  <button
+                    className="tag-yes"
+                    onClick={() => removeTag.mutate(tag.id)}
+                    disabled={removeTag.isPending}
+                  >
+                    삭제
+                  </button>
+                  <button className="tag-no" onClick={() => setRemoving(null)}>
+                    취소
+                  </button>
+                </div>
               ) : (
                 <div key={tag.id} className="tag-row">
                   <button className="tag-name" onClick={() => choose(tag)}>
@@ -124,7 +156,7 @@ export function TagPicker({ selected, onSelect }: Props) {
                   </button>
                   <span className="tag-count">{tag.count}</span>
                   <button
-                    className="tag-rename"
+                    className="tag-act"
                     title="이름 변경 (같은 이름으로 바꾸면 합쳐집니다)"
                     onClick={() => {
                       setEditing(tag);
@@ -132,6 +164,11 @@ export function TagPicker({ selected, onSelect }: Props) {
                     }}
                   >
                     ✎
+                  </button>
+                  {/* 사진은 지우지 않는다 — 이름표만 없앤다 */}
+                  <button className="tag-act" title="태그 삭제 (사진은 남습니다)"
+                    onClick={() => setRemoving(tag)}>
+                    ✕
                   </button>
                 </div>
               ),

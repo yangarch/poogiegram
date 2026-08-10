@@ -519,15 +519,30 @@ button.danger:disabled { opacity: 0.5; cursor: default; }
   font: inherit; text-align: left;
   cursor: pointer;
 }
-.tag-rename {
+.tag-act {
   padding: 2px 6px;
   color: var(--fg-dim);
   background: none; border: 0; border-radius: 5px;
   font: inherit; cursor: pointer;
   opacity: 0;
 }
-.tag-row:hover .tag-rename { opacity: 1; }
-.tag-rename:hover { color: var(--fg); background: var(--bg); }
+.tag-row:hover .tag-act { opacity: 1; }
+.tag-act:hover { color: var(--fg); background: var(--bg); }
+
+/* 터치 기기에는 hover 가 없다 — 항상 보여야 누를 수 있다 */
+@media (hover: none) {
+  .tag-act { opacity: 1; }
+}
+
+.tag-confirm { gap: 8px; }
+.tag-confirm .tag-name { color: var(--fg-dim); font-size: 13px; }
+.tag-yes, .tag-no {
+  padding: 4px 9px;
+  border: 0; border-radius: 6px;
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.tag-yes { color: #fff; background: #b4483a; }
+.tag-no { color: var(--fg-dim); background: none; }
 
 .tag-edit { gap: 6px; }
 .tag-edit input {
