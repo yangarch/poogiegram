@@ -48,8 +48,16 @@ async def sessionmaker_():
 
 
 def _photo(path, size=(48, 32)):
+    """파일마다 **다른 바이트**여야 한다.
+
+    같은 내용이면 sha256 이 같아 두 번째부터 중복으로 걸러진다 (§5.2). 실제로
+    그렇게 만들어 놓고 "2장 등록"을 기대했다가 테스트가 깨졌다 — 중복 제거가
+    제대로 동작한 결과였다.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", size, (120, 90, 60)).save(path, format="JPEG")
+    seed = sum(path.name.encode())
+    img = Image.new("RGB", size, (seed % 256, (seed * 7) % 256, (seed * 13) % 256))
+    img.save(path, format="JPEG")
     return path
 
 
@@ -93,6 +101,22 @@ async def test_여러_번_돌려도_안전하다(sessionmaker_, settings):
     assert second.get("reindexed") is None, "두 번째 실행은 등록할 것이 없어야 한다"
     assert second.get("duplicate") == 1
     assert ids2 == [], "이미 있는 자산의 파생물을 다시 큐에 넣지 않는다"
+
+
+async def test_같은_내용의_파일은_한_번만_등록된다(sessionmaker_, settings):
+    """이름이 달라도 내용이 같으면 같은 사진이다 (§5.2).
+
+    복구 상황에서 특히 중요하다 — 같은 사진을 여러 폴더에 복사해둔 경우가 흔하다.
+    """
+    src = _photo(settings.originals_dir / "2026/08/08/x__11111111.jpg")
+    copy = settings.originals_dir / "2026/08/08/x_사본__22222222.jpg"
+    copy.write_bytes(src.read_bytes())
+
+    counts, new_ids = await reindex_all(sessionmaker_, settings)
+
+    assert counts.get("reindexed") == 1
+    assert counts.get("duplicate") == 1
+    assert len(new_ids) == 1
 
 
 async def test_마커_파일은_건너뛴다(sessionmaker_, settings):
