@@ -118,16 +118,16 @@ status-derive: ## 파생물 상태 요약 (실패 사유 포함)
 		    WHERE derive_status = 'failed' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 10;" \
 		| sed '/^$$/d;$$d'
 
-create-user: ## 계정 생성 (E=이메일, ADMIN=1 이면 관리자)
-	@test -n "$(E)" || { echo 'E=이메일 을 지정하세요. 예: make create-user E=me@example.com ADMIN=1'; exit 1; }
-	$(DC) exec api python -m poogiegram.cli create-user "$(E)" $(if $(ADMIN),--admin,) $(if $(NAME),--name "$(NAME)",)
+create-user: ## 계정 생성 (U=아이디, NAME=표시이름, ADMIN=1 이면 관리자)
+	@test -n "$(U)" || { echo 'U=아이디 를 지정하세요. 예: make create-user U=kiseok NAME="기석" ADMIN=1'; exit 1; }
+	$(DC) exec api python -m poogiegram.cli create-user "$(U)" $(if $(ADMIN),--admin,) $(if $(NAME),--name "$(NAME)",)
 
 users: ## 계정 목록
 	@$(DC) exec -T api python -m poogiegram.cli list-users
 
-passwd: ## 비밀번호 변경 (E=이메일)
-	@test -n "$(E)" || { echo 'E=이메일 을 지정하세요'; exit 1; }
-	$(DC) exec api python -m poogiegram.cli passwd "$(E)"
+passwd: ## 비밀번호 변경 (U=아이디)
+	@test -n "$(U)" || { echo 'U=아이디 를 지정하세요'; exit 1; }
+	$(DC) exec api python -m poogiegram.cli passwd "$(U)"
 
 migrate: ## DB 마이그레이션 적용
 	$(DC) exec api alembic upgrade head

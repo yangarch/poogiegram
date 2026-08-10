@@ -2,7 +2,7 @@
 
 export interface Me {
   id: string;
-  email: string;
+  username: string;
   display_name: string;
   role: string;
 }
@@ -65,10 +65,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   me: () => request<Me>("/api/auth/me"),
 
-  login: (email: string, password: string) =>
+  login: (username: string, password: string) =>
     request<Me>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, password }),
     }),
 
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),

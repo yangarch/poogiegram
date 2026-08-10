@@ -50,3 +50,31 @@ def test_제어문자를_지운다():
 def test_확장자는_남는다():
     """인제스트가 MIME 검사를 하지만 확장자도 진단에 쓰인다."""
     assert safe_component("IMG_1234.HEIC", "x") == "IMG_1234.HEIC"
+
+
+# ── 계정 아이디 (§8) ─────────────────────────────────────────────────
+
+
+def test_아이디는_소문자로_통일된다():
+    """대소문자를 구분하면 Kiseok 으로 만들고 kiseok 으로 로그인하려다 막힌다."""
+    from poogiegram.cli import _normalize_username
+
+    assert _normalize_username("Kiseok") == "kiseok"
+    assert _normalize_username("  KISEOK  ") == "kiseok"
+
+
+def test_쓸_수_없는_아이디는_거부한다():
+    import pytest
+
+    from poogiegram.cli import _normalize_username
+
+    for bad in ("a", "-nope", "한글", "with space", "x" * 40, ""):
+        with pytest.raises(SystemExit):
+            _normalize_username(bad)
+
+
+def test_쓸_수_있는_아이디():
+    from poogiegram.cli import _normalize_username
+
+    for good in ("kiseok", "my.wife", "poogie-2", "user_1", "ab"):
+        assert _normalize_username(good) == good

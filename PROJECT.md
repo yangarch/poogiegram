@@ -467,7 +467,7 @@ album(id, name, cover_asset_id, owner_id, created_at, updated_at)
 album_asset(album_id, asset_id, position,  primary key (album_id, asset_id))
 tag(id, name text unique)
 asset_tag(asset_id, tag_id,  primary key (asset_id, tag_id))
-app_user(id, email unique, password_hash, display_name, role)  -- role: admin | member
+app_user(id, username unique, password_hash, display_name, role)  -- role: admin | member
 
 -- 앨범 또는 자산 중 정확히 하나만 가리킨다
 share_link(

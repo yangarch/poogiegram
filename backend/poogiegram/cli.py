@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import asyncio
 import getpass
 import secrets
@@ -57,42 +58,60 @@ async def _with_session(fn):
         await engine.dispose()
 
 
-async def create_user(email: str, name: str | None, is_admin: bool) -> int:
+USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,31}$")
+
+
+def _normalize_username(raw: str) -> str:
+    """아이디를 소문자로 통일한다.
+
+    대소문자를 구분하면 `Kiseok` 으로 만들고 `kiseok` 으로 로그인하려다 막힌다.
+    실수의 대가가 "왜 안 되지"라서, 애초에 구분하지 않는 편이 낫다.
+    """
+    name = raw.strip().lower()
+    if not USERNAME_RE.match(name):
+        raise SystemExit(
+            f"쓸 수 없는 아이디입니다: {raw!r}\n"
+            "  영문 소문자·숫자로 시작하고, 2~32자. . _ - 를 쓸 수 있습니다."
+        )
+    return name
+
+
+async def create_user(username: str, name: str | None, is_admin: bool) -> int:
     password = _prompt_password()
 
     async def run(session):
         existing = await session.scalar(
-            select(AppUser).where(func.lower(AppUser.email) == email.lower())
+            select(AppUser).where(func.lower(AppUser.username) == username)
         )
         if existing is not None:
-            print(f"이미 존재하는 계정입니다: {email}", file=sys.stderr)
+            print(f"이미 존재하는 계정입니다: {username}", file=sys.stderr)
             return 1
         session.add(
             AppUser(
-                email=email.lower(),
+                username=username,
                 password_hash=auth.hash_password(password),
-                display_name=name or email.split("@")[0],
+                display_name=name or username,
                 role="admin" if is_admin else "member",
             )
         )
-        print(f"생성됨: {email} ({'admin' if is_admin else 'member'})")
+        print(f"생성됨: {username} ({'admin' if is_admin else 'member'})")
         return 0
 
     return await _with_session(run)
 
 
-async def change_password(email: str) -> int:
+async def change_password(username: str) -> int:
     password = _prompt_password()
 
     async def run(session):
         user = await session.scalar(
-            select(AppUser).where(func.lower(AppUser.email) == email.lower())
+            select(AppUser).where(func.lower(AppUser.username) == username)
         )
         if user is None:
-            print(f"계정을 찾을 수 없습니다: {email}", file=sys.stderr)
+            print(f"계정을 찾을 수 없습니다: {username}", file=sys.stderr)
             return 1
         user.password_hash = auth.hash_password(password)
-        print(f"비밀번호 변경됨: {email}")
+        print(f"비밀번호 변경됨: {username}")
         print("  기존 세션은 그대로 유효합니다. 끊으려면 로그아웃하거나 Redis 세션을 지우세요.")
         return 0
 
@@ -106,7 +125,7 @@ async def list_users() -> int:
             print("계정이 없습니다. create-user 로 관리자를 먼저 만드세요.")
             return 0
         for u in users:
-            print(f"  {u.email:<32} {u.role:<7} {u.display_name}")
+            print(f"  {u.username:<20} {u.role:<7} {u.display_name}")
         return 0
 
     return await _with_session(run)
@@ -156,21 +175,21 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("create-user", help="계정 생성")
-    p.add_argument("email")
+    p.add_argument("username", help="로그인 아이디 (영문 소문자·숫자, 2~32자)")
     p.add_argument("--name", help="표시 이름 (기본: 이메일 로컬파트)")
     p.add_argument("--admin", action="store_true", help="관리자 권한")
 
     p = sub.add_parser("passwd", help="비밀번호 변경")
-    p.add_argument("email")
+    p.add_argument("username")
 
     sub.add_parser("list-users", help="계정 목록")
     sub.add_parser("reindex", help="originals/ 를 훑어 DB 에 없는 파일을 등록 (복구용)")
 
     args = parser.parse_args()
     if args.command == "create-user":
-        return asyncio.run(create_user(args.email, args.name, args.admin))
+        return asyncio.run(create_user(_normalize_username(args.username), args.name, args.admin))
     if args.command == "passwd":
-        return asyncio.run(change_password(args.email))
+        return asyncio.run(change_password(_normalize_username(args.username)))
     if args.command == "reindex":
         return asyncio.run(reindex())
     return asyncio.run(list_users())

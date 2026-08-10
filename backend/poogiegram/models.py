@@ -42,7 +42,9 @@ class AppUser(Base):
     __tablename__ = "app_user"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_PK)
-    email: Mapped[str] = mapped_column(String(320), unique=True)
+    # 로그인 식별자. 이메일이었으나 실제 용도가 로그인뿐이었다 — 비밀번호 재설정도
+    # 알림도 없다. 가족이 쓰는 서비스에서 이메일을 매번 치는 것은 마찰일 뿐이다.
+    username: Mapped[str] = mapped_column(String(32), unique=True)
     password_hash: Mapped[str] = mapped_column(Text)
     display_name: Mapped[str] = mapped_column(String(100))
     role: Mapped[str] = mapped_column(String(16), default="member", server_default=text("'member'"))

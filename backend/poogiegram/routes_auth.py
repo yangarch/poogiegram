@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from . import auth
@@ -18,13 +18,13 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 
 class UserOut(BaseModel):
     id: str
-    email: str
+    username: str
     display_name: str
     role: str
 
@@ -55,14 +55,14 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Use
 
     async with request.app.state.sessionmaker() as session:
         user = await session.scalar(
-            select(AppUser).where(func.lower(AppUser.email) == body.email.lower())
+            select(AppUser).where(func.lower(AppUser.username) == body.username.lower())
         )
         # 계정이 없어도 검증 비용을 치른다 — 응답 시간으로 계정 존재를 알아내지 못하게.
         valid = auth.verify_password(user.password_hash if user else None, body.password)
 
         if not valid or user is None:
             await auth.record_failure(redis, ip)
-            log.warning("로그인 실패: %s (%s)", body.email, ip)
+            log.warning("로그인 실패: %s (%s)", body.username, ip)
             # 어느 쪽이 틀렸는지 알려주지 않는다
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다")
 
@@ -73,8 +73,8 @@ async def login(body: LoginRequest, request: Request, response: Response) -> Use
     await auth.clear_failures(redis, ip)
     token = await auth.create_session(redis, user.id, request.app.state.settings.session_ttl_seconds)
     _set_cookie(response, token, request)
-    log.info("로그인: %s (%s)", user.email, ip)
-    return UserOut(id=str(user.id), email=user.email, display_name=user.display_name, role=user.role)
+    log.info("로그인: %s (%s)", user.username, ip)
+    return UserOut(id=str(user.id), username=user.username, display_name=user.display_name, role=user.role)
 
 
 @router.post("/logout")
@@ -87,4 +87,4 @@ async def logout(request: Request, response: Response) -> dict:
 
 @router.get("/me")
 async def me(user: AppUser = Depends(current_user)) -> UserOut:
-    return UserOut(id=str(user.id), email=user.email, display_name=user.display_name, role=user.role)
+    return UserOut(id=str(user.id), username=user.username, display_name=user.display_name, role=user.role)
