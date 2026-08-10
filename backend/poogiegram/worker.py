@@ -9,7 +9,9 @@ M1-2 현재: 드롭 폴더를 주기적으로 훑어 처리 가능한 파일을 
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import logging
+import time
 
 from arq.connections import RedisSettings
 
@@ -95,6 +97,16 @@ async def scan_drop_folder(ctx) -> dict:
         # 아직 올라오는 중인 폴더를 지우면 업로드가 깨진다.
         if not waiting:
             prune_empty_dirs(settings.drop_dir)
+        else:
+            # 안정성 검사가 끝날 때쯤 한 번 더 훑는다. 이게 없으면 다음 주기
+            # 스캔(300초)까지 기다리게 되어, SFTP 로 올린 사진이 최대 5분 뒤에야
+            # 보인다. job_id 로 묶어 스캔이 반복될 때 예약이 쌓이지 않게 한다.
+            delay = settings.ingest_stable_seconds + 5
+            await redis.enqueue_job(
+                "scan_drop_folder",
+                _defer_by=dt.timedelta(seconds=delay),
+                _job_id=f"scan:followup:{int((time.time() + delay) // delay)}",
+            )
         return {
             "ready": len(ready),
             "waiting": len(waiting),

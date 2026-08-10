@@ -101,8 +101,12 @@ async def upload(
 
     log.info("업로드 수신: %s (%d bytes)%s", dest.name, size, f" 태그={tag}" if tag else "")
 
-    # 스캔을 앞당긴다. 주기 스캔은 300초라 그때까지 화면에 아무 변화가 없다.
-    # 안정성 검사(30초)는 그대로 거치므로 잘린 파일이 들어갈 위험은 없다 (§6.1).
-    await request.app.state.arq.enqueue_job("scan_drop_folder")
+    # 인제스트를 바로 큐에 넣는다. 스캔을 거치지 않는 이유는 **이 파일이 완전하다는
+    # 것을 우리가 알기 때문이다** — 다 받은 뒤 rename 했다. 안정성 검사(30초)는
+    # SFTP 처럼 파일이 흘러 들어오는 경우를 위한 것이라 (§6.1) 여기에는 해당이 없다.
+    #
+    # 스캔에 맡기면 30초 대기 후 다음 주기(300초)까지 기다려, 올린 사진이 최대
+    # 5분 뒤에야 보인다. 실제로 3분 40초가 걸렸다.
+    await request.app.state.arq.enqueue_job("ingest_file", str(dest))
 
     return {"filename": dest.name, "bytes": size}
