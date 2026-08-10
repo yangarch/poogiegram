@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type TagItem } from "./api";
 
 interface Props {
@@ -16,9 +16,24 @@ interface Props {
 }
 
 export function TagPicker({ selected, onSelect }: Props) {
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [editing, setEditing] = useState<TagItem | null>(null);
+  const [draft, setDraft] = useState("");
   const box = useRef<HTMLDivElement>(null);
+
+  // 이미 있는 이름으로 바꾸면 서버가 병합한다 (§5.3). "합치기"를 따로 만들면
+  // 사용자가 두 기능의 차이를 먼저 이해해야 한다.
+  const rename = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.renameTag(id, name),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["tags"] });
+      qc.invalidateQueries({ queryKey: ["assets"] });
+      if (selected?.id === editing?.id) onSelect({ ...result, count: 0 });
+      setEditing(null);
+    },
+  });
 
   // 검색어는 서버로 보낸다. 태그가 수백 개면 전부 받아 거르는 것이 낭비다.
   const tags = useQuery({
@@ -79,12 +94,48 @@ export function TagPicker({ selected, onSelect }: Props) {
                 {q ? "일치하는 태그가 없습니다" : "아직 태그가 없습니다"}
               </p>
             )}
-            {tags.data?.items.map((tag) => (
-              <button key={tag.id} className="tag-row" onClick={() => choose(tag)}>
-                <span className="tag-name">{tag.name}</span>
-                <span className="tag-count">{tag.count}</span>
-              </button>
-            ))}
+            {tags.data?.items.map((tag) =>
+              editing?.id === tag.id ? (
+                <form
+                  key={tag.id}
+                  className="tag-row tag-edit"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const name = draft.trim();
+                    if (name && name !== tag.name) rename.mutate({ id: tag.id, name });
+                    else setEditing(null);
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && setEditing(null)}
+                    aria-label="태그 이름"
+                  />
+                  <button type="submit" disabled={rename.isPending}>
+                    저장
+                  </button>
+                </form>
+              ) : (
+                <div key={tag.id} className="tag-row">
+                  <button className="tag-name" onClick={() => choose(tag)}>
+                    {tag.name}
+                  </button>
+                  <span className="tag-count">{tag.count}</span>
+                  <button
+                    className="tag-rename"
+                    title="이름 변경 (같은 이름으로 바꾸면 합쳐집니다)"
+                    onClick={() => {
+                      setEditing(tag);
+                      setDraft(tag.name);
+                    }}
+                  >
+                    ✎
+                  </button>
+                </div>
+              ),
+            )}
           </div>
           {!q && (
             <p className="tag-hint">

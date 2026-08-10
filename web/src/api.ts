@@ -122,6 +122,30 @@ export const api = {
     if (q) params.set("q", q);
     return request<{ items: TagItem[] }>(`/api/tags?${params}`);
   },
+
+  /** 이미 있는 이름으로 바꾸면 병합된다 (§5.3) */
+  renameTag: (id: string, name: string) =>
+    request<{ id: string; name: string; merged: boolean }>(`/api/tags/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteTag: (id: string) =>
+    request<{ ok: boolean }>(`/api/tags/${id}`, { method: "DELETE" }),
+
+  // ── 일괄 편집 (§5.3) — 한 번의 동작이 여러 장을 커버해야 실제로 쓰인다 ──
+
+  editTags: (assetIds: string[], add: string[], remove: string[]) =>
+    request<{ assets: number; added: number; removed: number }>("/api/edit/tags", {
+      method: "POST",
+      body: JSON.stringify({ asset_ids: assetIds, add, remove }),
+    }),
+
+  deleteAssets: (assetIds: string[]) =>
+    request<{ deleted: number }>("/api/edit/delete", {
+      method: "POST",
+      body: JSON.stringify({ asset_ids: assetIds }),
+    }),
 };
 
 export const assetUrl = {

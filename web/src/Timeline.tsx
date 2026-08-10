@@ -13,6 +13,8 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { api, assetUrl, type AssetItem } from "./api";
 import { layoutRows, widthsOf, type Row } from "./layout";
 import { Lightbox } from "./Lightbox";
+import { RemoveFromTag, SelectionBar } from "./SelectionBar";
+import type { TagItem } from "./api";
 
 const GAP = 14;
 const TARGET_HEIGHT = 280;
@@ -57,11 +59,15 @@ function Tile({
   width,
   height,
   onOpen,
+  selecting,
+  selected,
 }: {
   item: AssetItem;
   width: number;
   height: number;
   onOpen: () => void;
+  selecting: boolean;
+  selected: boolean;
 }) {
   const [loaded, setLoaded] = useState(false);
   return (
@@ -69,6 +75,7 @@ function Tile({
       className="tile"
       style={{ width, height }}
       data-ready={item.ready}
+      data-selected={selected}
       onClick={onOpen}
       // 키보드로도 열려야 한다 — 그리드 전체가 마우스 전용이 되면 곤란하다
       role="button"
@@ -100,16 +107,43 @@ function Tile({
       )}
       {item.kind === "video" && <span className="badge">▶</span>}
       {item.has_motion && <span className="badge badge-motion">LIVE</span>}
+      {/* 선택 모드에서만 체크를 보여준다. 항상 띄우면 감상에 방해가 된다 */}
+      {selecting && <span className="tile-check">{selected ? "✓" : ""}</span>}
     </div>
   );
 }
 
-export function Timeline({ tagId }: { tagId: string | null }) {
+export function Timeline({
+  tag,
+  selectMode,
+  onExitSelect,
+}: {
+  tag: TagItem | null;
+  selectMode: boolean;
+  onExitSelect: () => void;
+}) {
+  const tagId = tag?.id ?? null;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // 헤더에서 선택 모드로 들어온다. 아무것도 안 고른 상태에서도 모드가 유지돼야
+  // 첫 장을 고를 수 있다 — 개수로 판단하면 진입 자체가 불가능하다.
+  const selecting = selectMode;
+
+  // 모드를 빠져나가면 선택도 비운다. 남겨두면 다시 들어왔을 때 지난 선택이 살아 있다.
+  useEffect(() => {
+    if (!selectMode) setSelected(new Set());
+  }, [selectMode]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const query = useInfiniteQuery({
     // 태그를 키에 넣어야 바꿀 때 목록이 새로 시작한다. 빼면 이전 태그의 페이지가
@@ -180,7 +214,13 @@ export function Timeline({ tagId }: { tagId: string | null }) {
                   item={item}
                   width={widthsOf(block.row)[i]}
                   height={block.height}
-                  onOpen={() => setOpenIndex(items.indexOf(item))}
+                  selecting={selecting}
+                  selected={selected.has(item.id)}
+                  // 선택 중에는 탭이 선택 토글이 된다. 라이트박스로 들어가면
+                  // 여러 장 고르는 흐름이 매번 끊긴다.
+                  onOpen={() =>
+                    selecting ? toggle(item.id) : setOpenIndex(items.indexOf(item))
+                  }
                 />
               ))}
             </div>
@@ -189,6 +229,14 @@ export function Timeline({ tagId }: { tagId: string | null }) {
       </div>
 
       {query.isFetchingNextPage && <p className="notice">더 불러오는 중…</p>}
+
+      {selecting && selected.size > 0 && (
+        <SelectionBar ids={[...selected]} onClear={onExitSelect}>
+          {tag && (
+            <RemoveFromTag ids={[...selected]} tag={tag} onDone={onExitSelect} />
+          )}
+        </SelectionBar>
+      )}
 
       {openIndex !== null && (
         <Lightbox

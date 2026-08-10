@@ -10,6 +10,7 @@ export function App() {
   const qc = useQueryClient();
   const [tag, setTag] = useState<TagItem | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
   const me = useQuery({
     queryKey: ["me"],
     queryFn: api.me,
@@ -31,6 +32,9 @@ export function App() {
         <strong>poogiegram</strong>
         <TagPicker selected={tag} onSelect={setTag} />
         <span className="spacer" />
+        <button className="link" onClick={() => setSelectMode((v) => !v)}>
+          {selectMode ? "선택 끝내기" : "선택"}
+        </button>
         <button className="link" onClick={() => setUploading(true)}>
           올리기
         </button>
@@ -39,7 +43,11 @@ export function App() {
           로그아웃
         </button>
       </header>
-      <Timeline tagId={tag?.id ?? null} />
+      <Timeline
+        tag={tag}
+        selectMode={selectMode}
+        onExitSelect={() => setSelectMode(false)}
+      />
       {uploading && <Upload tag={tag} onClose={() => setUploading(false)} />}
     </div>
   );

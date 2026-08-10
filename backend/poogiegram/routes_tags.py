@@ -11,11 +11,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import func, select
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import func, select, update
 
 from .deps import current_user
+from .ingest.pipeline import TAG_NAME_MAX
 from .models import Asset, AssetTag, Tag
+
+log = logging.getLogger("poogiegram.tags")
 
 router = APIRouter(prefix="/api/tags", tags=["tags"], dependencies=[Depends(current_user)])
 
@@ -57,3 +64,58 @@ async def list_tags(
         rows = (await session.execute(stmt)).all()
 
     return {"items": [{"id": str(r.id), "name": r.name, "count": r.count} for r in rows]}
+
+
+class TagRename(BaseModel):
+    name: str = Field(min_length=1, max_length=TAG_NAME_MAX)
+
+
+@router.patch("/{tag_id}")
+async def rename_tag(tag_id: str, body: TagRename, request: Request) -> dict:
+    """이름을 바꾼다. **이미 있는 이름으로 바꾸면 병합된다** (§5.3).
+
+    오타로 표기가 흔들리는 것은 막을 수 없다 — `푸기생일`과 `푸기 생일`이 따로
+    생긴다. 되돌릴 수 있어야 하므로 이름 변경과 병합을 한 동작으로 둔다.
+    "합치기"를 따로 만들면 사용자가 두 기능의 차이를 먼저 이해해야 한다.
+    """
+    name = " ".join(body.name.split())
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "이름이 비어 있습니다")
+
+    async with request.app.state.sessionmaker() as session:
+        async with session.begin():
+            tag = await session.get(Tag, tag_id)
+            if tag is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "태그를 찾지 못했습니다")
+            if tag.name == name:
+                return {"id": str(tag.id), "name": name, "merged": False}
+
+            target = await session.scalar(select(Tag).where(Tag.name == name))
+            if target is None:
+                tag.name = name
+                return {"id": str(tag.id), "name": name, "merged": False}
+
+            # 병합. 양쪽에 다 붙어 있던 자산은 PK 가 겹치므로 먼저 걸러낸다.
+            both = select(AssetTag.asset_id).where(AssetTag.tag_id == target.id)
+            await session.execute(
+                update(AssetTag)
+                .where(AssetTag.tag_id == tag.id, AssetTag.asset_id.not_in(both))
+                .values(tag_id=target.id)
+            )
+            await session.execute(sql_delete(AssetTag).where(AssetTag.tag_id == tag.id))
+            await session.delete(tag)
+            log.info("태그 병합: %s → %s", tag.name, name)
+            return {"id": str(target.id), "name": name, "merged": True}
+
+
+@router.delete("/{tag_id}")
+async def delete_tag(tag_id: str, request: Request) -> dict:
+    """태그만 지운다. **사진은 그대로다** — asset_tag 만 정리된다."""
+    async with request.app.state.sessionmaker() as session:
+        async with session.begin():
+            tag = await session.get(Tag, tag_id)
+            if tag is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "태그를 찾지 못했습니다")
+            await session.execute(sql_delete(AssetTag).where(AssetTag.tag_id == tag.id))
+            await session.delete(tag)
+    return {"ok": True}

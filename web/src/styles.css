@@ -431,3 +431,117 @@ button.primary:disabled { opacity: 0.5; cursor: default; }
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* ── 선택 모드 (§5.3) ──────────────────────────────────────── */
+
+.tile[data-selected="true"] { outline: 3px solid var(--accent); outline-offset: -3px; }
+.tile[data-selected="true"] img { opacity: 0.72; }
+
+.tile-check {
+  position: absolute; top: 8px; left: 8px;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  font-size: 13px; color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+}
+.tile[data-selected="true"] .tile-check { background: var(--accent); border-color: var(--accent); }
+
+/* 작업 막대는 화면 아래 고정 — 스크롤하며 계속 고를 수 있어야 한다 */
+.selbar {
+  position: fixed;
+  left: 50%; bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex; align-items: center; gap: 12px;
+  width: calc(100% - 40px); max-width: 720px;
+  padding: 10px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.selbar-count { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.selbar-warn { font-size: 14px; color: #e0a05b; white-space: nowrap; }
+
+.selbar-tag { position: relative; }
+.selbar-tag input {
+  width: 190px;
+  padding: 7px 11px;
+  font: inherit; font-size: 14px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.selbar-tag input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* 제안 목록은 위로 편다 — 막대가 화면 아래에 붙어 있다 */
+.selbar-suggest {
+  position: absolute;
+  bottom: calc(100% + 6px); left: 0;
+  width: 240px;
+  padding: 5px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+}
+.selbar-suggest button {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  color: var(--fg);
+  background: none; border: 0; border-radius: 6px;
+  font: inherit; font-size: 14px; text-align: left;
+  cursor: pointer;
+}
+.selbar-suggest button:hover { background: var(--bg); }
+.selbar-suggest button span { margin-left: auto; color: var(--fg-dim); font-size: 13px; }
+
+button.danger {
+  padding: 6px 12px;
+  color: #fff;
+  background: #b4483a;
+  border: 0; border-radius: 7px;
+  font: inherit; font-size: 14px;
+  cursor: pointer;
+}
+button.danger:disabled { opacity: 0.5; cursor: default; }
+
+/* 태그 이름 변경 */
+.tag-row { position: relative; }
+.tag-row .tag-name {
+  flex: 1;
+  padding: 0; margin: 0;
+  color: inherit; background: none; border: 0;
+  font: inherit; text-align: left;
+  cursor: pointer;
+}
+.tag-rename {
+  padding: 2px 6px;
+  color: var(--fg-dim);
+  background: none; border: 0; border-radius: 5px;
+  font: inherit; cursor: pointer;
+  opacity: 0;
+}
+.tag-row:hover .tag-rename { opacity: 1; }
+.tag-rename:hover { color: var(--fg); background: var(--bg); }
+
+.tag-edit { gap: 6px; }
+.tag-edit input {
+  flex: 1; min-width: 0;
+  padding: 5px 8px;
+  font: inherit; font-size: 14px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.tag-edit button {
+  padding: 5px 9px;
+  color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px;
+  font: inherit; font-size: 13px; cursor: pointer;
+}
