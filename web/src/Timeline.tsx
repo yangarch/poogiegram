@@ -65,25 +65,55 @@ function Tile({
   item: AssetItem;
   width: number;
   height: number;
-  onOpen: () => void;
+  onOpen: (mode: "toggle" | "range") => void;
   selecting: boolean;
   selected: boolean;
 }) {
   const [loaded, setLoaded] = useState(false);
+  // 터치에는 드래그 선택을 쓸 수 없다 — 끌기가 스크롤이라 가로채면 목록을 못
+  // 내린다. 대신 길게 눌러 "여기까지" 범위 선택을 한다.
+  const press = useRef<number | null>(null);
+  const ranged = useRef(false);
+
+  const cancelPress = () => {
+    if (press.current !== null) {
+      window.clearTimeout(press.current);
+      press.current = null;
+    }
+  };
+
   return (
     <div
       className="tile"
       style={{ width, height }}
       data-ready={item.ready}
       data-selected={selected}
-      onClick={onOpen}
+      onClick={(e) => {
+        // 길게 눌러 범위를 잡은 뒤의 click 은 무시한다 — 안 그러면 마지막 타일이
+        // 곧바로 해제된다.
+        if (ranged.current) {
+          ranged.current = false;
+          return;
+        }
+        onOpen(e.shiftKey ? "range" : "toggle");
+      }}
+      onPointerDown={(e) => {
+        if (!selecting || e.pointerType !== "touch") return;
+        press.current = window.setTimeout(() => {
+          ranged.current = true;
+          onOpen("range");
+        }, 450);
+      }}
+      onPointerMove={cancelPress}
+      onPointerUp={cancelPress}
+      onPointerCancel={cancelPress}
       // 키보드로도 열려야 한다 — 그리드 전체가 마우스 전용이 되면 곤란하다
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onOpen();
+          onOpen(e.shiftKey ? "range" : "toggle");
         }
       }}
     >
@@ -146,6 +176,31 @@ export function Timeline({
       return next;
     });
 
+  // ── 드래그 선택 ─────────────────────────────────────────────
+  //
+  // 타일 위치는 레이아웃에서 이미 계산해 두었으므로 DOM 을 재지 않는다. 덕분에
+  // **화면 밖 타일도 잡힌다** — 가상 스크롤이라 DOM 에는 보이는 것만 있다.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; y: number; base: Set<string>; moved: boolean } | null>(null);
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  // 드래그가 끝난 직후의 click 을 막는다. 안 그러면 놓는 순간 그 타일이 다시 토글된다.
+  const draggedRef = useRef(false);
+  const [marquee, setMarquee] = useState<{ l: number; t: number; w: number; h: number } | null>(null);
+  /** Shift+클릭 범위 선택의 기준점 */
+  const anchorRef = useRef<string | null>(null);
+
+  const selectRange = (fromId: string, toId: string) => {
+    const a = items.findIndex((i) => i.id === fromId);
+    const b = items.findIndex((i) => i.id === toId);
+    if (a < 0 || b < 0) return;
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (let i = lo; i <= hi; i++) next.add(items[i].id);
+      return next;
+    });
+  };
+
   const query = useInfiniteQuery({
     // 태그를 키에 넣어야 바꿀 때 목록이 새로 시작한다. 빼면 이전 태그의 페이지가
     // 남아 섞인다.
@@ -178,6 +233,27 @@ export function Timeline({
   );
   const { blocks, total } = useMemo(() => buildBlocks(items, width), [items, width]);
 
+  /** 캔버스 기준 타일 사각형. 드래그 교차 판정에 쓴다 */
+  const tileBoxes = useMemo(() => {
+    const boxes: { id: string; x1: number; y1: number; x2: number; y2: number }[] = [];
+    for (const block of blocks) {
+      if (block.type !== "row") continue;
+      const widths = widthsOf(block.row);
+      let x = 0;
+      block.row.items.forEach((item, i) => {
+        boxes.push({
+          id: item.id,
+          x1: x,
+          y1: block.top,
+          x2: x + widths[i],
+          y2: block.top + block.height,
+        });
+        x += widths[i] + GAP;
+      });
+    }
+    return boxes;
+  }, [blocks]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -199,6 +275,58 @@ export function Timeline({
     }
   }, [scrollTop, viewportHeight, total, query]);
 
+  // 드래그 중 화면 끝에 닿으면 자동으로 스크롤한다. 없으면 한 화면 넘는 범위를
+  // 고를 수 없다.
+  const AUTOSCROLL_EDGE = 70;
+  const AUTOSCROLL_STEP = 14;
+
+  const applyDrag = (clientX: number, clientY: number) => {
+    const drag = dragRef.current;
+    const canvas = canvasRef.current;
+    if (!drag || !canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    if (Math.abs(x - drag.x) > 4 || Math.abs(y - drag.y) > 4) drag.moved = true;
+
+    const l = Math.min(drag.x, x);
+    const r = Math.max(drag.x, x);
+    const tp = Math.min(drag.y, y);
+    const bt = Math.max(drag.y, y);
+    setMarquee({ l, t: tp, w: r - l, h: bt - tp });
+
+    // 시작할 때의 선택에 더한다. 여러 번 나눠 끌어도 앞의 선택이 남는다.
+    const next = new Set(drag.base);
+    for (const box of tileBoxes) {
+      if (box.x1 < r && box.x2 > l && box.y1 < bt && box.y2 > tp) next.add(box.id);
+    }
+    setSelected(next);
+  };
+
+  useEffect(() => {
+    if (!marquee) return;
+    const id = window.setInterval(() => {
+      const el = scrollRef.current;
+      const point = pointerRef.current;
+      if (!el || !point) return;
+      const box = el.getBoundingClientRect();
+      const delta =
+        point.y < box.top + AUTOSCROLL_EDGE
+          ? -AUTOSCROLL_STEP
+          : point.y > box.bottom - AUTOSCROLL_EDGE
+            ? AUTOSCROLL_STEP
+            : 0;
+      if (delta) {
+        el.scrollTop += delta;
+        // 스크롤하면 캔버스가 움직이므로 같은 손 위치라도 덮는 범위가 달라진다
+        applyDrag(point.x, point.y);
+      }
+    }, 16);
+    return () => window.clearInterval(id);
+  }, [marquee, tileBoxes]);
+
   const visible = blocks.filter(
     (b) => b.top + b.height > scrollTop - OVERSCAN && b.top < scrollTop + viewportHeight + OVERSCAN,
   );
@@ -206,6 +334,7 @@ export function Timeline({
   return (
     <div
       className="timeline"
+      data-selecting={selecting}
       ref={scrollRef}
       onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
     >
@@ -222,7 +351,47 @@ export function Timeline({
         </p>
       )}
 
-      <div className="canvas" style={{ height: total }}>
+      <div
+        className="canvas"
+        ref={canvasRef}
+        style={{ height: total }}
+        // 터치는 제외한다 — 끌기가 스크롤이라, 가로채면 목록을 내릴 수 없다.
+        onPointerDown={(e) => {
+          if (!selecting || e.pointerType === "touch" || e.button !== 0) return;
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          dragRef.current = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+            base: new Set(selected),
+            moved: false,
+          };
+          pointerRef.current = { x: e.clientX, y: e.clientY };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          if (!dragRef.current) return;
+          pointerRef.current = { x: e.clientX, y: e.clientY };
+          applyDrag(e.clientX, e.clientY);
+        }}
+        onPointerUp={() => {
+          draggedRef.current = dragRef.current?.moved ?? false;
+          dragRef.current = null;
+          pointerRef.current = null;
+          setMarquee(null);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          pointerRef.current = null;
+          setMarquee(null);
+        }}
+      >
+        {marquee && marquee.w > 2 && marquee.h > 2 && (
+          <div
+            className="marquee"
+            style={{ left: marquee.l, top: marquee.t, width: marquee.w, height: marquee.h }}
+          />
+        )}
         {visible.map((block) =>
           block.type === "header" ? (
             <h2 key={block.key} className="month" style={{ top: block.top }}>
@@ -240,9 +409,24 @@ export function Timeline({
                   selected={selected.has(item.id)}
                   // 선택 중에는 탭이 선택 토글이 된다. 라이트박스로 들어가면
                   // 여러 장 고르는 흐름이 매번 끊긴다.
-                  onOpen={() =>
-                    selecting ? toggle(item.id) : setOpenIndex(items.indexOf(item))
-                  }
+                  onOpen={(mode) => {
+                    // 끌어서 고른 직후의 click 은 무시한다. 안 그러면 손을 뗀
+                    // 자리의 타일이 곧바로 다시 토글된다.
+                    if (draggedRef.current) {
+                      draggedRef.current = false;
+                      return;
+                    }
+                    if (!selecting) {
+                      setOpenIndex(items.indexOf(item));
+                      return;
+                    }
+                    if (mode === "range" && anchorRef.current) {
+                      selectRange(anchorRef.current, item.id);
+                    } else {
+                      anchorRef.current = item.id;
+                      toggle(item.id);
+                    }
+                  }}
                 />
               ))}
             </div>

@@ -657,3 +657,20 @@ button.danger:disabled { opacity: 0.5; cursor: default; }
   color: #6ba368;
   white-space: nowrap;
 }
+
+/* 드래그 선택 사각형 */
+.marquee {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid var(--accent);
+  background: rgba(201, 162, 39, 0.16);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* 선택 모드에서는 끌 때 글자·이미지가 잡히지 않아야 사각형이 자연스럽다 */
+.timeline[data-selecting="true"] .canvas { user-select: none; -webkit-user-select: none; }
+.timeline[data-selecting="true"] .tile img { -webkit-user-drag: none; }
+
+.selbar-tip { font-size: 12px; color: var(--fg-dim); white-space: nowrap; }
+@media (max-width: 640px) { .selbar-tip { display: none; } }

@@ -79,6 +79,8 @@ export function SelectionBar({ ids, loaded, onSelectAll, onClear, children }: Pr
       <span className="selbar-count">
         {ids.length ? `${ids.length}장 선택` : "사진을 고르세요"}
       </span>
+      {/* 조작 방법을 알려준다. 드래그는 마우스에서만 되고, 터치에는 길게 누르기가 있다 */}
+      {!ids.length && <span className="selbar-tip">끌어서 여러 장 · 길게 눌러 여기까지</span>}
       {ids.length < loaded && (
         <button className="link" onClick={onSelectAll}>
           모두 선택 ({loaded})
