@@ -78,3 +78,34 @@ def test_쓸_수_있는_아이디():
 
     for good in ("kiseok", "my.wife", "poogie-2", "user_1", "ab"):
         assert _normalize_username(good) == good
+
+
+# ── 태그 여러 개 (§5.5) ──────────────────────────────────────────────
+
+
+def test_쉼표로_태그를_나눈다():
+    from poogiegram.routes_upload import tag_folders
+
+    assert tag_folders("결혼기념일, 2025") == ["결혼기념일", "2025"]
+
+
+def test_띄어쓰기로는_나누지_않는다():
+    """태그 이름 안에 공백이 들어간다 — 공백으로 나누면 태그 세 개가 된다."""
+    from poogiegram.routes_upload import tag_folders
+
+    assert tag_folders("푸기 3번째 생일") == ["푸기 3번째 생일"]
+
+
+def test_빈_칸은_버린다():
+    from poogiegram.routes_upload import tag_folders
+
+    assert tag_folders("a,,b, ,c") == ["a", "b", "c"]
+    assert tag_folders("") == []
+    assert tag_folders(None) == []
+
+
+def test_나눈_뒤에도_경로로_해석되지_않는다():
+    from poogiegram.routes_upload import tag_folders
+
+    for folder in tag_folders("../etc, ..,  ok"):
+        assert "/" not in folder and folder not in (".", "..")

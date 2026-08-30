@@ -11,8 +11,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type TagItem } from "./api";
 
 interface Props {
-  selected: TagItem | null;
-  onSelect: (tag: TagItem | null) => void;
+  selected: TagItem[];
+  onSelect: (tags: TagItem[]) => void;
 }
 
 export function TagPicker({ selected, onSelect }: Props) {
@@ -31,7 +31,10 @@ export function TagPicker({ selected, onSelect }: Props) {
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["tags"] });
       qc.invalidateQueries({ queryKey: ["assets"] });
-      if (selected?.id === editing?.id) onSelect({ ...result, count: 0 });
+      // 병합되면 id 가 바뀐다. 고른 목록에도 반영해야 필터가 안 깨진다.
+      onSelect(
+        selected.map((s) => (s.id === editing?.id ? { ...result, count: s.count } : s)),
+      );
       setEditing(null);
     },
   });
@@ -46,7 +49,7 @@ export function TagPicker({ selected, onSelect }: Props) {
     onSuccess: (_r, id) => {
       qc.invalidateQueries({ queryKey: ["tags"] });
       qc.invalidateQueries({ queryKey: ["assets"] });
-      if (selected?.id === id) onSelect(null);   // 보고 있던 태그가 사라졌다
+      onSelect(selected.filter((s) => s.id !== id));   // 보고 있던 태그가 사라졌다
       setRemoving(null);
     },
   });
@@ -72,26 +75,31 @@ export function TagPicker({ selected, onSelect }: Props) {
     };
   }, [open]);
 
-  const choose = (tag: TagItem | null) => {
-    onSelect(tag);
-    setOpen(false);
-    setQ("");
+  // 여러 개를 고를 수 있다. 고른 것을 다시 누르면 해제된다 — 패널을 닫지 않는
+  // 이유는 연달아 고르는 경우가 많기 때문이다.
+  const toggle = (tag: TagItem) => {
+    const has = selected.some((s) => s.id === tag.id);
+    onSelect(has ? selected.filter((s) => s.id !== tag.id) : [...selected, tag]);
   };
 
   return (
     <div className="tagpicker" ref={box}>
-      {selected ? (
-        // 고른 태그는 칩으로 남긴다. 무엇을 보고 있는지 항상 보여야 한다.
-        <span className="tag-chip">
-          {selected.name}
-          <button onClick={() => choose(null)} aria-label="태그 해제">
+      {/* 고른 태그는 칩으로 남긴다. 무엇을 보고 있는지 항상 보여야 한다. */}
+      {selected.map((tag) => (
+        <span key={tag.id} className="tag-chip">
+          {tag.name}
+          <button onClick={() => toggle(tag)} aria-label={`${tag.name} 해제`}>
             ✕
           </button>
         </span>
-      ) : (
-        <button className="link" onClick={() => setOpen((v) => !v)}>
-          태그 ▾
-        </button>
+      ))}
+      <button className="link" onClick={() => setOpen((v) => !v)}>
+        {selected.length ? "+" : "태그 ▾"}
+      </button>
+      {selected.length > 1 && (
+        <span className="tag-and" title="고른 태그가 모두 붙은 사진만 보입니다">
+          모두 포함
+        </span>
       )}
 
       {open && (
@@ -150,8 +158,13 @@ export function TagPicker({ selected, onSelect }: Props) {
                   </button>
                 </div>
               ) : (
-                <div key={tag.id} className="tag-row">
-                  <button className="tag-name" onClick={() => choose(tag)}>
+                <div
+                  key={tag.id}
+                  className="tag-row"
+                  data-on={selected.some((s) => s.id === tag.id)}
+                >
+                  <button className="tag-name" onClick={() => toggle(tag)}>
+                    {selected.some((s) => s.id === tag.id) ? "✓ " : ""}
                     {tag.name}
                   </button>
                   <span className="tag-count">{tag.count}</span>

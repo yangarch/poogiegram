@@ -91,7 +91,7 @@ async def list_assets(
     limit: int = Query(100, ge=1, le=PAGE_SIZE_MAX),
     cursor: str | None = None,
     favorites: bool = False,
-    tag_id: str | None = None,
+    tag_id: list[str] = Query(default=[]),
 ) -> dict:
     """타임라인. 커서 기반이라 스크롤 중 새 자산이 들어와도 밀리지 않는다.
 
@@ -111,12 +111,15 @@ async def list_assets(
     )
     if favorites:
         stmt = stmt.where(Asset.is_favorite.is_(True))
-    if tag_id:
-        # 태그로 거른다 (§5.5). EXISTS 를 쓰는 이유는 조인이 행을 부풀리지 않게
-        # 하기 위해서다 — 커서 페이지네이션은 행 수가 정확해야 한다.
+    # 태그로 거른다 (§5.5). 여러 개면 **모두 붙은 사진만** — 범위를 좁혀 들어가는
+    # 쪽이 계층적 태그(2025 + 결혼기념일)에서 쓸모가 있다.
+    #
+    # 조인 대신 태그마다 EXISTS 를 쌓는다. 조인하면 태그 수만큼 행이 불어나
+    # 커서 페이지네이션의 개수가 어긋난다.
+    for one in tag_id:
         stmt = stmt.where(
             select(AssetTag.asset_id)
-            .where(AssetTag.asset_id == Asset.id, AssetTag.tag_id == tag_id)
+            .where(AssetTag.asset_id == Asset.id, AssetTag.tag_id == one)
             .exists()
         )
     if cursor:

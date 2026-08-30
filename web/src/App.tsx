@@ -8,7 +8,7 @@ import { Upload } from "./Upload";
 
 export function App() {
   const qc = useQueryClient();
-  const [tag, setTag] = useState<TagItem | null>(null);
+  const [tags, setTags] = useState<TagItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const me = useQuery({
@@ -30,7 +30,7 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <strong>poogiegram</strong>
-        <TagPicker selected={tag} onSelect={setTag} />
+        <TagPicker selected={tags} onSelect={setTags} />
         <span className="spacer" />
         <button className="link" onClick={() => setSelectMode((v) => !v)}>
           {selectMode ? "선택 끝내기" : "선택"}
@@ -44,11 +44,11 @@ export function App() {
         </button>
       </header>
       <Timeline
-        tag={tag}
+        tags={tags}
         selectMode={selectMode}
         onExitSelect={() => setSelectMode(false)}
       />
-      {uploading && <Upload tag={tag} onClose={() => setUploading(false)} />}
+      {uploading && <Upload tags={tags} onClose={() => setUploading(false)} />}
     </div>
   );
 }

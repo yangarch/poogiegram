@@ -28,14 +28,15 @@ interface Job {
 }
 
 interface Props {
-  tag: TagItem | null;
+  /** 지금 보고 있는 태그들 — 올릴 때 기본값으로 채운다 */
+  tags: TagItem[];
   onClose: () => void;
 }
 
-export function Upload({ tag, onClose }: Props) {
+export function Upload({ tags, onClose }: Props) {
   const qc = useQueryClient();
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [tagName, setTagName] = useState(tag?.name ?? "");
+  const [tagName, setTagName] = useState(tags.map((t) => t.name).join(", "));
   const [running, setRunning] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
@@ -85,11 +86,13 @@ export function Upload({ tag, onClose }: Props) {
         </header>
 
         <label className="field">
-          태그
+          {/* 쉼표로 나눈다. 띄어쓰기로 나눌 수 없는 이유는 "푸기 3번째 생일" 처럼
+              태그 이름 안에 공백이 들어가기 때문이다 (§5.5). */}
+          태그 — 여러 개는 쉼표로 구분
           <input
             value={tagName}
             onChange={(e) => setTagName(e.target.value)}
-            placeholder="예: 푸기 3번째 생일 (비워두면 태그 없음)"
+            placeholder="예: 결혼기념일, 2025"
             disabled={running}
           />
         </label>

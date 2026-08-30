@@ -114,15 +114,17 @@ function Tile({
 }
 
 export function Timeline({
-  tag,
+  tags,
   selectMode,
   onExitSelect,
 }: {
-  tag: TagItem | null;
+  tags: TagItem[];
   selectMode: boolean;
   onExitSelect: () => void;
 }) {
-  const tagId = tag?.id ?? null;
+  // 쿼리 키에 그대로 쓰므로 순서가 흔들리면 안 된다 — 고른 순서가 달라도 같은
+  // 조건이면 같은 캐시를 써야 한다.
+  const tagIds = useMemo(() => tags.map((t) => t.id).sort(), [tags]);
   const qc = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -149,8 +151,8 @@ export function Timeline({
   const query = useInfiniteQuery({
     // 태그를 키에 넣어야 바꿀 때 목록이 새로 시작한다. 빼면 이전 태그의 페이지가
     // 남아 섞인다.
-    queryKey: ["assets", tagId],
-    queryFn: ({ pageParam }) => api.assets(pageParam as string | null, tagId),
+    queryKey: ["assets", tagIds],
+    queryFn: ({ pageParam }) => api.assets(pageParam as string | null, tagIds),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.next_cursor,
   });
@@ -158,7 +160,7 @@ export function Timeline({
   // 태그가 바뀐 사진만 캐시에서 갈아끼운다. 전체를 다시 불러오면 스크롤이 튀고,
   // 태그로 거르는 중이면 보던 사진이 목록에서 사라져 라이트박스가 닫힌다.
   const patchTags = (assetId: string, tags: AssetItem["tags"]) =>
-    qc.setQueryData(["assets", tagId], (old: any) =>
+    qc.setQueryData(["assets", tagIds], (old: any) =>
       old
         ? {
             ...old,
@@ -212,7 +214,11 @@ export function Timeline({
       {query.isPending && <p className="notice">불러오는 중…</p>}
       {!query.isPending && items.length === 0 && (
         <p className="notice">
-          {tagId ? "이 태그에 사진이 없습니다." : "아직 사진이 없습니다."}
+          {tagIds.length
+            ? tagIds.length > 1
+              ? "고른 태그가 모두 붙은 사진이 없습니다."
+              : "이 태그에 사진이 없습니다."
+            : "아직 사진이 없습니다."}
           <br />
           드롭 폴더에 넣으면 자동으로 들어옵니다.
         </p>
@@ -248,11 +254,18 @@ export function Timeline({
 
       {query.isFetchingNextPage && <p className="notice">더 불러오는 중…</p>}
 
-      {selecting && selected.size > 0 && (
-        <SelectionBar ids={[...selected]} onClear={onExitSelect}>
-          {tag && (
-            <RemoveFromTag ids={[...selected]} tag={tag} onDone={onExitSelect} />
-          )}
+      {selecting && (
+        <SelectionBar
+          ids={[...selected]}
+          // 무한 스크롤이라 "모두"는 지금까지 불러온 것까지다. 개수를 함께 보여주면
+          // 실제로 몇 장이 선택되는지 착각하지 않는다.
+          loaded={items.length}
+          onSelectAll={() => setSelected(new Set(items.map((i) => i.id)))}
+          onClear={onExitSelect}
+        >
+          {tags.map((t) => (
+            <RemoveFromTag key={t.id} ids={[...selected]} tag={t} onDone={onExitSelect} />
+          ))}
         </SelectionBar>
       )}
 

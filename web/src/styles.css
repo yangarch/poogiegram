@@ -632,3 +632,21 @@ button.danger:disabled { opacity: 0.5; cursor: default; }
   color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
 }
+
+/* 여러 태그를 고를 수 있다 — 고른 것은 체크로 표시하고 패널은 닫지 않는다 */
+.tag-row[data-on="true"] { background: var(--bg); }
+.tag-row[data-on="true"] .tag-name { font-weight: 600; }
+
+.tag-and {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* 헤더에 칩이 여러 개 들어가면 좁은 화면에서 넘친다 */
+.topbar { flex-wrap: wrap; row-gap: 8px; }
+.tagpicker { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }

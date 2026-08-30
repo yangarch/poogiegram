@@ -13,12 +13,15 @@ import { api, type TagItem } from "./api";
 
 interface Props {
   ids: string[];
+  /** 지금까지 불러온 사진 수. 무한 스크롤이라 "모두"는 여기까지다 */
+  loaded: number;
+  onSelectAll: () => void;
   onClear: () => void;
   /** 태그를 보고 있을 때의 "빼기" 버튼 등, 문맥에 따라 달라지는 동작 */
   children?: ReactNode;
 }
 
-export function SelectionBar({ ids, onClear, children }: Props) {
+export function SelectionBar({ ids, loaded, onSelectAll, onClear, children }: Props) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -49,14 +52,22 @@ export function SelectionBar({ ids, onClear, children }: Props) {
     onSuccess: done,
   });
 
-  const busy = addTag.isPending || removeTag.isPending || remove.isPending;
+  // 아무것도 안 골랐으면 동작을 막는다. 빈 목록으로 보내면 서버가 400 을 낸다.
+  const busy = !ids.length || addTag.isPending || removeTag.isPending || remove.isPending;
   const typed = name.trim();
   // 입력한 이름이 기존 태그와 정확히 같으면 "새로 만들기"를 또 보여줄 필요가 없다
   const exact = suggestions.data?.items.find((t) => t.name === typed);
 
   return (
     <div className="selbar">
-      <span className="selbar-count">{ids.length}장 선택</span>
+      <span className="selbar-count">
+        {ids.length ? `${ids.length}장 선택` : "사진을 고르세요"}
+      </span>
+      {ids.length < loaded && (
+        <button className="link" onClick={onSelectAll}>
+          모두 선택 ({loaded})
+        </button>
+      )}
 
       <div className="selbar-tag">
         <input

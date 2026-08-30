@@ -48,6 +48,22 @@ def safe_component(name: str, fallback: str) -> str:
     return name[:TAG_NAME_MAX] or fallback
 
 
+def tag_folders(raw: str | None) -> list[str]:
+    """태그 문자열을 폴더 이름들로 나눈다.
+
+    **구분자는 쉼표다.** 띄어쓰기로 나눌 수 없는 이유는 "푸기 3번째 생일" 처럼
+    태그 이름 안에 공백이 들어가기 때문이다 — 공백으로 나누면 태그 세 개가 된다.
+
+    폴더를 겹쳐 쌓으면 경로의 각 단계가 각각 태그가 되므로(§5.5) 태그 여러 개를
+    새 코드 없이 표현할 수 있다.
+    """
+    folders = []
+    for part in (raw or "").split(","):
+        if folder := safe_component(part, ""):
+            folders.append(folder)
+    return folders
+
+
 @router.post("")
 async def upload(
     request: Request,
@@ -61,8 +77,13 @@ async def upload(
     """
     settings = request.app.state.settings
 
+    # 태그 여러 개는 폴더를 겹쳐 쌓아 표현한다. 경로의 각 단계가 각각 태그가
+    # 되므로(§5.5) drop/결혼기념일/2025/ 는 태그 두 개가 된다.
+    #
+    # 구분자는 쉼표다. 띄어쓰기로 나눌 수 없는 이유는 "푸기 3번째 생일" 처럼
+    # 태그 이름 안에 공백이 들어가기 때문이다.
     target_dir = settings.drop_dir
-    if tag and (folder := safe_component(tag, "")):
+    for folder in tag_folders(tag):
         target_dir = target_dir / folder
     target_dir.mkdir(parents=True, exist_ok=True)
 

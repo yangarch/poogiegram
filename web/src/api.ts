@@ -73,10 +73,11 @@ export const api = {
 
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
 
-  assets: (cursor: string | null, tagId: string | null = null, limit = 120) => {
+  assets: (cursor: string | null, tagIds: string[] = [], limit = 120) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
-    if (tagId) params.set("tag_id", tagId);
+    // 같은 이름을 반복해 보낸다 — 여러 개면 모두 붙은 사진만 나온다 (§5.5)
+    for (const id of tagIds) params.append("tag_id", id);
     return request<AssetPage>(`/api/assets?${params}`);
   },
 
