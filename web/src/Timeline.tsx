@@ -116,11 +116,9 @@ function Tile({
 export function Timeline({
   tags,
   selectMode,
-  onExitSelect,
 }: {
   tags: TagItem[];
   selectMode: boolean;
-  onExitSelect: () => void;
 }) {
   // 쿼리 키에 그대로 쓰므로 순서가 흔들리면 안 된다 — 고른 순서가 달라도 같은
   // 조건이면 같은 캐시를 써야 한다.
@@ -261,10 +259,15 @@ export function Timeline({
           // 실제로 몇 장이 선택되는지 착각하지 않는다.
           loaded={items.length}
           onSelectAll={() => setSelected(new Set(items.map((i) => i.id)))}
-          onClear={onExitSelect}
+          onClear={() => setSelected(new Set())}
         >
           {tags.map((t) => (
-            <RemoveFromTag key={t.id} ids={[...selected]} tag={t} onDone={onExitSelect} />
+            <RemoveFromTag
+              key={t.id}
+              ids={[...selected]}
+              tag={t}
+              onDone={() => setSelected(new Set())}
+            />
           ))}
         </SelectionBar>
       )}

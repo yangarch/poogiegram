@@ -650,3 +650,10 @@ button.danger:disabled { opacity: 0.5; cursor: default; }
 /* 헤더에 칩이 여러 개 들어가면 좁은 화면에서 넘친다 */
 .topbar { flex-wrap: wrap; row-gap: 8px; }
 .tagpicker { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* 태그를 붙여도 선택이 그대로라 화면 변화가 거의 없다 — 무엇이 붙었는지 알린다 */
+.selbar-ok {
+  font-size: 13px;
+  color: #6ba368;
+  white-space: nowrap;
+}

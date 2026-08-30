@@ -43,11 +43,8 @@ export function App() {
           로그아웃
         </button>
       </header>
-      <Timeline
-        tags={tags}
-        selectMode={selectMode}
-        onExitSelect={() => setSelectMode(false)}
-      />
+      {/* 선택 모드 종료는 헤더에서만 한다. 막대의 "선택 해제"는 고른 것만 비운다 */}
+      <Timeline tags={tags} selectMode={selectMode} />
       {uploading && <Upload tags={tags} onClose={() => setUploading(false)} />}
     </div>
   );
