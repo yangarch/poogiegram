@@ -14,6 +14,7 @@ import { api, assetUrl, type AssetItem } from "./api";
 import { layoutRows, widthsOf, type Row } from "./layout";
 import { Lightbox } from "./Lightbox";
 import { RemoveFromTag, SelectionBar } from "./SelectionBar";
+import { Slideshow } from "./Slideshow";
 import type { TagItem } from "./api";
 
 const GAP = 14;
@@ -146,9 +147,13 @@ function Tile({
 export function Timeline({
   tags,
   selectMode,
+  slideshow,
+  onSlideshow,
 }: {
   tags: TagItem[];
   selectMode: boolean;
+  slideshow: boolean;
+  onSlideshow: (on: boolean) => void;
 }) {
   // 쿼리 키에 그대로 쓰므로 순서가 흔들리면 안 된다 — 고른 순서가 달라도 같은
   // 조건이면 같은 캐시를 써야 한다.
@@ -444,6 +449,7 @@ export function Timeline({
           loaded={items.length}
           onSelectAll={() => setSelected(new Set(items.map((i) => i.id)))}
           onClear={() => setSelected(new Set())}
+          onSlideshow={() => onSlideshow(true)}
         >
           {tags.map((t) => (
             <RemoveFromTag
@@ -454,6 +460,15 @@ export function Timeline({
             />
           ))}
         </SelectionBar>
+      )}
+
+      {/* 고른 것이 있으면 그것만, 없으면 지금 보고 있는 목록 전체를 돌린다.
+          무한 스크롤이라 "전체"는 "모두 선택"과 같은 한계 — 지금까지 불러온 만큼이다. */}
+      {slideshow && (
+        <Slideshow
+          items={selected.size ? items.filter((i) => selected.has(i.id)) : items}
+          onClose={() => onSlideshow(false)}
+        />
       )}
 
       {openIndex !== null && (

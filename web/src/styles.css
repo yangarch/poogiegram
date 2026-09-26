@@ -674,3 +674,132 @@ button.danger:disabled { opacity: 0.5; cursor: default; }
 
 .selbar-tip { font-size: 12px; color: var(--fg-dim); white-space: nowrap; }
 @media (max-width: 640px) { .selbar-tip { display: none; } }
+
+/* ── 슬라이드 쇼 (§7.2) ────────────────────────────────────── */
+
+/* 액자다. 라이트박스보다 더 어둡게 가고 크롬은 기본적으로 없다. */
+.slideshow {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* 손을 놓으면 커서까지 감춘다 — 화면에 남은 화살표 하나가 액자를 앱으로 되돌린다 */
+.slideshow[data-ui="false"] { cursor: none; }
+
+.ss-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+/* 빠지는 사진 위로 덮이며 나타난다. 검정을 거치지 않아 한 장이 다음 장으로 녹아든다 */
+.ss-entering { animation: ss-fade-in ease-in-out both; }
+@keyframes ss-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* 세로 사진의 좌우 빈자리를 같은 사진의 흐린 확대로 채운다. 검은 띠보다 낫다 */
+.ss-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  filter: blur(48px) brightness(0.45) saturate(1.1);
+  transform: scale(1.15);
+}
+
+/* 레이어를 꽉 채우고 여백은 object-fit 에 맡긴다.
+   **절대 배치여야 한다** — 그리드 칸에 놓으면 `height: 100%` 가 화면이 아니라 칸
+   (= 사진 원래 비율로 늘어난 트랙) 기준으로 풀려서 세로로 화면 밖까지 넘친다. */
+.ss-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+  /* 아주 느린 확대. 1분을 완전히 정지한 화면으로 두면 사진이 죽어 보인다 */
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes ss-kb-in  { from { transform: scale(1); }    to { transform: scale(1.05); } }
+@keyframes ss-kb-out { from { transform: scale(1.05); } to { transform: scale(1); } }
+.ss-kb-in  { animation-name: ss-kb-in; }
+.ss-kb-out { animation-name: ss-kb-out; }
+
+.ss-motion { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+
+/* 날짜는 잠깐 떴다 사라진다 */
+.ss-caption {
+  position: absolute;
+  /* 조작 막대(약 60px)를 피한다. 둘이 겹치면 날짜가 버튼 위에 얹힌다 */
+  left: 0; right: 0; bottom: 78px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  animation: ss-caption 4.2s ease-in-out both;
+}
+@keyframes ss-caption {
+  0% { opacity: 0; }
+  10%, 62% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.ss-controls {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  opacity: 0;
+  transition: opacity 240ms ease;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), transparent);
+}
+.slideshow[data-ui="true"] .ss-controls { opacity: 1; pointer-events: auto; }
+
+/* 남은 시간. transform 으로 그려 몇 시간을 틀어놔도 레이아웃을 다시 계산하지 않는다 */
+.ss-progress {
+  height: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  animation-name: ss-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes ss-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.ss-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  color: #f2f1ef;
+  font-size: 14px;
+}
+.ss-intervals { display: flex; gap: 4px; margin-left: 10px; }
+.ss-bar .lb-btn[data-on="true"] { background: var(--accent); color: #1d1e20; }
+.ss-bar .lb-btn:disabled { opacity: 0.35; cursor: default; }
+.ss-count { color: #a9a9ad; font-variant-numeric: tabular-nums; }
+.ss-warn { color: var(--accent); font-size: 13px; }
+
+.ss-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  color: #a9a9ad;
+  text-align: center;
+  line-height: 1.7;
+}
+
+/* 움직임을 줄여달라고 했으면 줄인다 — 켄번즈는 취향이지 기능이 아니다 */
+@media (prefers-reduced-motion: reduce) {
+  .ss-photo { animation-name: none; }
+  .ss-entering { animation-duration: 1ms !important; }
+}

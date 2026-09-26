@@ -11,6 +11,9 @@ export function App() {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
+  // 슬라이드 쇼는 선택 모드와 나란히 헤더에서 켠다. 대상은 Timeline 이 정한다
+  // — 고른 것이 있으면 그것만, 없으면 지금 보고 있는 목록이다 (§7.2).
+  const [slideshow, setSlideshow] = useState(false);
   const me = useQuery({
     queryKey: ["me"],
     queryFn: api.me,
@@ -35,6 +38,9 @@ export function App() {
         <button className="link" onClick={() => setSelectMode((v) => !v)}>
           {selectMode ? "선택 끝내기" : "선택"}
         </button>
+        <button className="link" onClick={() => setSlideshow(true)}>
+          슬라이드 쇼
+        </button>
         <button className="link" onClick={() => setUploading(true)}>
           올리기
         </button>
@@ -44,7 +50,12 @@ export function App() {
         </button>
       </header>
       {/* 선택 모드 종료는 헤더에서만 한다. 막대의 "선택 해제"는 고른 것만 비운다 */}
-      <Timeline tags={tags} selectMode={selectMode} />
+      <Timeline
+        tags={tags}
+        selectMode={selectMode}
+        slideshow={slideshow}
+        onSlideshow={setSlideshow}
+      />
       {uploading && <Upload tags={tags} onClose={() => setUploading(false)} />}
     </div>
   );

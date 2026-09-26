@@ -22,6 +22,8 @@ interface Props {
   onSelectAll: () => void;
   /** 선택만 비운다. 선택 모드는 유지된다 — 모드 종료는 헤더에서 한다 */
   onClear: () => void;
+  /** 고른 것만 액자로 돌린다 (§7.2). 고르고 나서 바로 찾는 자리라 여기에 둔다 */
+  onSlideshow: () => void;
   /** 태그를 보고 있을 때의 "빼기" 버튼 등, 문맥에 따라 달라지는 동작 */
   children?: ReactNode;
 }
@@ -31,7 +33,7 @@ export function parseTags(raw: string): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-export function SelectionBar({ ids, loaded, onSelectAll, onClear, children }: Props) {
+export function SelectionBar({ ids, loaded, onSelectAll, onClear, onSlideshow, children }: Props) {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -84,6 +86,11 @@ export function SelectionBar({ ids, loaded, onSelectAll, onClear, children }: Pr
       {ids.length < loaded && (
         <button className="link" onClick={onSelectAll}>
           모두 선택 ({loaded})
+        </button>
+      )}
+      {ids.length > 0 && (
+        <button className="link" onClick={onSlideshow}>
+          슬라이드 쇼
         </button>
       )}
 
