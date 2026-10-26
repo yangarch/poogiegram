@@ -7,10 +7,14 @@
  * 원본은 수십 MB 라 화면에 맞춰 보는 동안에는 받을 이유가 없다.
  *
  * 라이브 포토는 길게 눌러 재생한다 — 아이폰과 같은 조작이다.
+ *
+ * 댓글(§5.6)은 하단 막대의 버튼으로 연다. 열어 둔 상태는 사진을 넘겨도 유지한다.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { assetUrl, type AssetItem } from "./api";
+import { useQuery } from "@tanstack/react-query";
+import { api, assetUrl, type AssetItem } from "./api";
+import { Comments, commentsKey } from "./Comments";
 import { TagEditor } from "./TagEditor";
 
 /** 이 배율을 넘어가면 프리뷰가 뭉개지기 시작한다 */
@@ -50,6 +54,16 @@ export function Lightbox({ items, index, onIndex, onClose, onTagsChanged }: Prop
   const [hiLoaded, setHiLoaded] = useState(false);
   const [wantFull, setWantFull] = useState(false);
   const [playingMotion, setPlayingMotion] = useState(false);
+  // 사진이 바뀌어도 초기화하지 않는다 — 넘기며 읽는 것이 주된 쓰임이다
+  const [showComments, setShowComments] = useState(false);
+
+  // 패널을 닫아 둬도 개수는 버튼에 보여야 한다. 패널과 같은 키라 열 때 다시 받지 않는다.
+  const comments = useQuery({
+    queryKey: commentsKey(item?.id ?? ""),
+    queryFn: () => api.comments(item!.id),
+    enabled: !!item,
+  });
+  const commentCount = comments.data?.items.length ?? 0;
 
   const zoomed = transform.scale > 1.01;
 
@@ -77,6 +91,9 @@ export function Lightbox({ items, index, onIndex, onClose, onTagsChanged }: Prop
   // ── 키보드 ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 입력 중인 글자를 단축키로 가로채지 않는다. 안 막으면 댓글·태그에
+      // 띄어쓰기를 치는 순간 확대되고, ←→ 로 커서를 옮기면 사진이 넘어간다.
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea")) return;
       if (e.key === "Escape") {
         // 확대 중이면 먼저 원래 크기로. 바로 닫으면 확대만 풀고 싶을 때 답답하다.
         if (zoomed) setTransform(IDENTITY);
@@ -311,7 +328,18 @@ export function Lightbox({ items, index, onIndex, onClose, onTagsChanged }: Prop
               {playingMotion ? "LIVE 재생 중" : "길게 눌러 LIVE 재생"}
             </span>
           )}
+          <button
+            className="lb-btn"
+            onClick={() => setShowComments((v) => !v)}
+            aria-pressed={showComments}
+          >
+            댓글{commentCount > 0 && ` ${commentCount}`}
+          </button>
         </div>
+      )}
+
+      {!zoomed && showComments && (
+        <Comments assetId={item.id} onClose={() => setShowComments(false)} />
       )}
     </div>
   );

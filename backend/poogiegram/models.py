@@ -223,6 +223,41 @@ class AssetTag(Base):
     __table_args__ = (Index("ix_asset_tag_by_tag", "tag_id", "asset_id"),)
 
 
+COMMENT_BODY_MAX = 1000
+
+
+class Comment(Base):
+    """사진에 다는 댓글 (§5.6).
+
+    `asset.caption` 과 다르다 — caption 은 사진의 설명이고, 댓글은 누가 언제
+    했는지가 의미의 일부인 대화다.
+    """
+
+    __tablename__ = "comment"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=_UUID_PK)
+    # 휴지통은 asset 행을 지우지 않으므로 댓글도 남는다. 복원하면 같이 돌아온다.
+    asset_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("asset.id", ondelete="CASCADE"))
+    # 계정이 지워져도 댓글은 남긴다. 대화의 한쪽만 사라지면 나머지가 무슨 말인지 모른다.
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # 답이 달린 뒤 원문이 바뀌면 대화가 어긋나 보인다. "수정됨"을 붙이기 위해 둔다.
+    edited_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            f"char_length(body) BETWEEN 1 AND {COMMENT_BODY_MAX}", name="ck_comment_body"
+        ),
+        # 라이트박스가 사진 한 장의 댓글을 시간순으로 연다 — 이것만 빠르면 된다.
+        Index("ix_comment_asset", "asset_id", "created_at"),
+    )
+
+
 class ShareLink(Base):
     """앨범 또는 자산 중 정확히 하나를 가리킨다."""
 

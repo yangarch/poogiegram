@@ -77,6 +77,13 @@ def test_api는_폴백에_삼켜지지_않는다(with_static):
     assert res.status_code == 401, res.text
 
 
+def test_댓글_api도_폴백에_삼켜지지_않는다(with_static):
+    """사진 아래 경로와 댓글 자체 경로 둘 다. 등록을 빠뜨리면 HTML 이 돌아온다."""
+    asset = "00000000-0000-0000-0000-000000000001"
+    assert with_static.get(f"/api/assets/{asset}/comments").status_code == 401
+    assert with_static.delete(f"/api/comments/{asset}").status_code == 401
+
+
 def test_없는_api는_404다(with_static):
     """index.html 이 200 으로 돌아가면 디버깅이 헷갈린다."""
     res = with_static.get("/api/없는경로")

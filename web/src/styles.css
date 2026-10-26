@@ -633,6 +633,115 @@ button.danger:disabled { opacity: 0.5; cursor: default; }
   white-space: nowrap;
 }
 
+/* ── 라이트박스 댓글 (§5.6) ────────────────────────────────── */
+
+/* 사진 옆에 떠 있는 패널. 사진을 가리는 면적을 줄이려고 오른쪽에 좁게 둔다.
+   상·하단 막대 사이에 끼워서 내려받기·닫기·댓글 버튼을 덮지 않는다. */
+.lb-comments {
+  position: absolute;
+  top: 64px; right: 16px; bottom: 72px;
+  z-index: 2;
+  width: min(340px, calc(100vw - 32px));
+  display: flex; flex-direction: column;
+  color: #f2f1ef;
+  font-size: 14px;
+  background: rgba(22, 23, 26, 0.88);
+  border: 1px solid #34353a;
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+.cm-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid #2c2e33;
+  font-weight: 600;
+}
+.cm-header em { font-style: normal; color: #a9a9ad; font-weight: 400; margin-left: 4px; }
+.cm-close {
+  padding: 2px 6px;
+  color: rgba(255, 255, 255, 0.65);
+  background: none; border: 0;
+  font: inherit; cursor: pointer;
+}
+.cm-close:hover { color: #fff; }
+
+.cm-list {
+  flex: 1;
+  margin: 0; padding: 6px 14px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cm-empty { padding: 18px 0; color: #8b8d92; text-align: center; }
+
+.cm-item { padding: 10px 0; }
+.cm-item + .cm-item { border-top: 1px solid #26282c; }
+.cm-meta { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: #8b8d92; }
+.cm-meta b { font-size: 13px; color: #f2f1ef; font-weight: 600; }
+.cm-edited { font-style: italic; }
+
+/* 줄바꿈을 살린다. 긴 URL 이 패널 밖으로 밀고 나가지 않게 끊는다. */
+.cm-body {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.cm-actions { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 12px; color: #a9a9ad; }
+.cm-actions button {
+  padding: 0;
+  color: #8b8d92;
+  background: none; border: 0;
+  font: inherit; cursor: pointer;
+}
+.cm-actions button:hover:not(:disabled) { color: #f2f1ef; }
+.cm-actions .cm-danger { color: #e07a6f; }
+
+.cm-compose {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #2c2e33;
+}
+.cm-compose textarea, .cm-edit textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 36px; max-height: 120px;
+  padding: 8px 10px;
+  font: inherit;
+  color: #f2f1ef;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #3a3c41;
+  border-radius: 8px;
+  resize: none;
+  field-sizing: content;   /* 지원하는 브라우저에서는 쓴 만큼 늘어난다 */
+}
+.cm-edit textarea { margin-top: 6px; }
+.cm-compose textarea:focus, .cm-edit textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.cm-compose button {
+  padding: 8px 12px;
+  color: #17181a;
+  background: var(--accent);
+  border: 0; border-radius: 8px;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.cm-compose button:disabled { opacity: 0.4; cursor: default; }
+
+.cm-error { margin: 0; padding: 0 14px 10px; font-size: 12px; color: #e07a6f; }
+
+/* 폰에서는 아래에서 올라오는 시트로. 옆에 두면 사진이 거의 안 보인다. */
+@media (max-width: 640px) {
+  .lb-comments {
+    top: auto; right: 0; bottom: 0; left: 0;
+    width: auto;
+    max-height: 60vh;
+    border-radius: 14px 14px 0 0;
+    border-width: 1px 0 0;
+  }
+}
+
 /* 여러 태그를 고를 수 있다 — 고른 것은 체크로 표시하고 패널은 닫지 않는다 */
 .tag-row[data-on="true"] { background: var(--bg); }
 .tag-row[data-on="true"] .tag-name { font-weight: 600; }

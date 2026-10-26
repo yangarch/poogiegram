@@ -32,6 +32,18 @@ export interface TagItem {
   count: number;
 }
 
+/** 사진 댓글 (§5.6). 오래된 것부터 온다 */
+export interface CommentItem {
+  id: string;
+  body: string;
+  /** 계정이 지워졌으면 null — 댓글은 남는다 */
+  author_id: string | null;
+  author_name: string | null;
+  created_at: string;
+  /** 고친 적이 있으면 "수정됨"을 붙인다 */
+  edited_at: string | null;
+}
+
 export interface AssetPage {
   items: AssetItem[];
   next_cursor: string | null;
@@ -143,6 +155,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ asset_ids: assetIds, add, remove }),
     }),
+
+  // ── 댓글 (§5.6) — 수정은 본인만, 삭제는 본인 + admin ──
+
+  comments: (assetId: string) =>
+    request<{ items: CommentItem[] }>(`/api/assets/${assetId}/comments`),
+
+  addComment: (assetId: string, body: string) =>
+    request<CommentItem>(`/api/assets/${assetId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+
+  editComment: (id: string, body: string) =>
+    request<CommentItem>(`/api/comments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    }),
+
+  deleteComment: (id: string) =>
+    request<{ ok: boolean }>(`/api/comments/${id}`, { method: "DELETE" }),
 
   deleteAssets: (assetIds: string[]) =>
     request<{ deleted: number }>("/api/edit/delete", {
