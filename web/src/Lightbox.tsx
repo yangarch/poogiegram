@@ -8,7 +8,7 @@
  *
  * 라이브 포토는 길게 눌러 재생한다 — 아이폰과 같은 조작이다.
  *
- * 댓글(§5.6)은 하단 막대의 버튼으로 연다. 열어 둔 상태는 사진을 넘겨도 유지한다.
+ * 댓글(§5.6)은 기본으로 열어 둔다. 닫은 상태는 사진을 넘겨도 유지한다.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -54,8 +54,12 @@ export function Lightbox({ items, index, onIndex, onClose, onTagsChanged }: Prop
   const [hiLoaded, setHiLoaded] = useState(false);
   const [wantFull, setWantFull] = useState(false);
   const [playingMotion, setPlayingMotion] = useState(false);
-  // 사진이 바뀌어도 초기화하지 않는다 — 넘기며 읽는 것이 주된 쓰임이다
-  const [showComments, setShowComments] = useState(false);
+  // 기본은 열림 — 버튼 뒤에 숨기면 댓글이 있는지도 모르고 지나간다. 단 폰 폭에서는
+  // 패널이 아래 시트라 사진을 절반 넘게 가리므로 닫아 둔다 (styles.css 의 640px 와 같은 기준).
+  // 사진이 바뀌어도 초기화하지 않는다 — 넘기며 읽는 것이 주된 쓰임이다.
+  const [showComments, setShowComments] = useState(
+    () => !window.matchMedia("(max-width: 640px)").matches,
+  );
 
   // 패널을 닫아 둬도 개수는 버튼에 보여야 한다. 패널과 같은 키라 열 때 다시 받지 않는다.
   const comments = useQuery({
