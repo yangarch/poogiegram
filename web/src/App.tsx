@@ -5,9 +5,11 @@ import { Login } from "./Login";
 import { TagPicker } from "./TagPicker";
 import { Timeline } from "./Timeline";
 import { Upload } from "./Upload";
+import { useSiteName } from "./useSiteName";
 
 export function App() {
   const qc = useQueryClient();
+  const siteName = useSiteName();
   const [tags, setTags] = useState<TagItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -32,7 +34,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <strong>poogiegram</strong>
+        <strong>{siteName}</strong>
         <TagPicker selected={tags} onSelect={setTags} />
         <span className="spacer" />
         <button className="link" onClick={() => setSelectMode((v) => !v)}>

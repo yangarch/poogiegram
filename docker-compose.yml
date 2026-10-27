@@ -1,9 +1,13 @@
+# 프로젝트 이름은 인스턴스마다 다르다 (§3.5). Makefile 이 -p 로 넘긴다.
+# 여기 값은 기본(푸기) 인스턴스의 것이다 — 바꾸면 기존 DB 볼륨(poogiegram_pgdata)을 못 찾는다.
 name: poogiegram
 
 x-backend: &backend
   build:
     context: .
-  env_file: .env
+  # 인스턴스마다 다른 환경 파일 (§3.5). .env 로 고정해 두면 모코 컨테이너가 푸기의
+  # SECRET_KEY·SITE_NAME 을 물려받는다 — DATABASE_URL 은 아래에서 따로 만들어 티가 안 난다.
+  env_file: ${ENV_FILE:-.env}
   environment:
     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     REDIS_URL: redis://redis:6379/0

@@ -77,6 +77,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   me: () => request<Me>("/api/auth/me"),
 
+  /** 화면 이름. 인스턴스마다 다르다 (§3.5). 로그인 전에도 받을 수 있다 */
+  site: () => request<{ name: string }>("/api/site"),
+
   login: (username: string, password: string) =>
     request<Me>("/api/auth/login", {
       method: "POST",

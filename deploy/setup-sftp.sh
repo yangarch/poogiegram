@@ -8,11 +8,15 @@
 #
 #   sudo ./deploy/setup-sftp.sh [계정명]
 #
+# 두 번째 인스턴스(§3.5)는 make 로 부른다. 자기 MEDIA_ROOT 의 incoming/ 에 갇힌다.
+#   make sftp I=moko U=mokodrop
+#
 # 여러 번 실행해도 안전하다.
 
 set -euo pipefail
 
 USER_NAME="${1:-poogiedrop}"
+NAME="${NAME:-poogiegram}"     # 인스턴스 이름. sshd_config 주석에만 쓴다
 GROUP_NAME="poogiegram"
 MEDIA_ROOT="${MEDIA_ROOT:-/mnt/media}"
 CHROOT="$MEDIA_ROOT/incoming"
@@ -85,7 +89,7 @@ else
     ok "백업: $SSHD_CONFIG.bak-*"
     cat >> "$SSHD_CONFIG" <<CONF
 
-# poogiegram 드롭 폴더 전용 (PROJECT.md §6.1)
+# $NAME 드롭 폴더 전용 (PROJECT.md §6.1)
 Match User $USER_NAME
     ChrootDirectory $CHROOT
     ForceCommand internal-sftp -u 0002

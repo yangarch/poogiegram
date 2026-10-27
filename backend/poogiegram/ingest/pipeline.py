@@ -463,10 +463,8 @@ async def reindex_all(sessionmaker, settings: Settings) -> tuple[dict[str, int],
     """
     counts: dict[str, int] = {}
     new_ids: list[str] = []
-    marker = ".poogiegram-ok"
-
     for path in sorted(settings.originals_dir.rglob("*")):
-        if not path.is_file() or path.name == marker or path.name.startswith("."):
+        if not path.is_file() or path.name == settings.storage_marker or path.name.startswith("."):
             continue
         async with sessionmaker() as session:
             async with session.begin():

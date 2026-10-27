@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
+import { useSiteName } from "./useSiteName";
 
 export function Login() {
   const qc = useQueryClient();
+  const siteName = useSiteName();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -20,7 +22,7 @@ export function Login() {
   return (
     <div className="login">
       <form onSubmit={submit}>
-        <h1>poogiegram</h1>
+        <h1>{siteName}</h1>
         <input
           type="text"
           value={username}

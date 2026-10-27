@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     # 워커에 작업을 넣기 위한 arq 풀. 수동 스캔 트리거에 쓴다 (§6.1).
     app.state.arq = await create_pool(RedisSettings.from_dsn(settings.redis_url))
 
-    log.info("poogiegram 기동 — media=%s derived=%s", settings.media_root, settings.derived_root)
+    log.info("%s 기동 — media=%s derived=%s", settings.site_name, settings.media_root, settings.derived_root)
     if not settings.x_accel:
         log.warning(
             "X_ACCEL 이 꺼져 있습니다 — 앱이 파일을 직접 전송합니다. 개발 전용 설정입니다 (§3)."
@@ -85,6 +85,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     app.include_router(edit_router)
     app.include_router(comments_router)
 
+    app.add_api_route("/api/site", site, methods=["GET"])
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/readyz", readyz, methods=["GET"])
 
@@ -92,6 +93,15 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
     _mount_spa(app, static_dir if static_dir is not None else default_static_dir())
 
     return app
+
+
+async def site(request: Request):
+    """화면 이름. **인증 없이** 준다 — 로그인 화면에서부터 어느 서비스인지 보여야 한다 (§3.5).
+
+    빌드에 굽지 않고 실행 중에 받는 이유는 이미지가 하나라서다. 인스턴스마다 이미지를
+    따로 빌드하면 "사양이 같다"가 빌드 시점에 갈라질 수 있다.
+    """
+    return {"name": request.app.state.settings.site_name}
 
 
 async def healthz():

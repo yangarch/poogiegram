@@ -18,6 +18,9 @@ class Settings(BaseSettings):
 
     secret_key: str = "change-me"
 
+    # 화면에 보이는 이름 (§3.5). 인스턴스를 여럿 띄우면 탭과 로그인 화면으로 구분한다.
+    site_name: str = "poogiegram"
+
     # 파일 전송을 nginx 에 넘긴다 (§3). 끄면 앱이 직접 전송하는데 개발 전용이다 —
     # 운영에서 끄면 대용량 파일 하나가 워커를 오래 점유해 API 전체가 느려진다.
     x_accel: bool = True

@@ -115,6 +115,67 @@ sudo ./deploy/setup-nginx.sh poogiegram.example.com
 TLS 는 certbot 이 붙인다. 끝나면 `.env` 의 `COOKIE_SECURE=true` 로 바꾸고 `make up`.
 HTTP 로 접속하는 동안 `true` 면 브라우저가 쿠키를 저장하지 않아 로그인이 계속 풀린다.
 
+## 인스턴스 추가
+
+같은 서버에 **같은 사양의 서비스를 하나 더** 띄운다 — 미디어·계정·태그는 따로다.
+체크아웃은 하나이고 환경 파일만 늘린다. 설계 근거는 [PROJECT.md §3.5](PROJECT.md).
+아래는 `moko` 예시다.
+
+**1. 스토리지** — 같은 디스크의 하위 폴더. `moko/` 는 SFTP chroot 조건 때문에 root 소유 755 여야 한다.
+
+```bash
+sudo mkdir -p /mnt/media/moko/{originals,trash,db,.tmp} /mnt/media/moko/incoming/{drop,failed}
+sudo mkdir -p /var/lib/mokogram/derived
+sudo touch /mnt/media/moko/originals/.poogiegram-ok
+
+sudo chown root:root /mnt/media/moko /mnt/media/moko/incoming
+sudo chmod 755       /mnt/media/moko /mnt/media/moko/incoming
+sudo chown -R root:poogiegram /mnt/media/moko/{originals,trash,db,.tmp} /mnt/media/moko/incoming/{drop,failed} /var/lib/mokogram
+sudo chmod 2775 /mnt/media/moko/{originals,trash,db,.tmp} /mnt/media/moko/incoming/{drop,failed}
+sudo chmod 2775 /var/lib/mokogram /var/lib/mokogram/derived
+```
+
+**2. 환경 파일** — `[인스턴스]` 표시가 붙은 값을 전부 바꾼다.
+
+```bash
+cp .env .env.moko        # GID 등 호스트 공통 값을 그대로 가져온다
+```
+
+| 키 | 값 |
+|---|---|
+| `COMPOSE_PROJECT_NAME` | `mokogram` |
+| `SITE_NAME` | `mokogram` |
+| `MEDIA_ROOT` | `/mnt/media/moko` |
+| `DERIVED_ROOT` | `/var/lib/mokogram/derived` |
+| `API_PORT` | `8006` — 비어 있는지 먼저 확인: `ss -ltn \| grep 8006` |
+| `SECRET_KEY` | `openssl rand -hex 32` 로 새로 |
+| `POSTGRES_DB` · `POSTGRES_USER` · `POSTGRES_PASSWORD` | `mokogram` · `mokogram` · 새 비밀번호 |
+| `TRANSCODE_CONCURRENCY` | `1` — GPU 를 푸기와 나눠 쓴다 |
+| `COOKIE_SECURE` | TLS 붙기 전까지 `false` |
+
+**`COMPOSE_PROJECT_NAME` 을 빠뜨리면 푸기의 컨테이너와 DB 에 붙는다.** `make up I=moko` 가
+이 값과 포트·경로가 `.env` 와 겹치는지 먼저 확인하고, 겹치면 띄우지 않는다.
+
+**3. 기동과 계정**
+
+```bash
+make up I=moko
+make create-user I=moko U=아이디 NAME="이름" ADMIN=1
+```
+
+**4. SFTP · nginx** — 포트·경로는 환경 파일에서 읽어 넘긴다.
+
+```bash
+make sftp  I=moko U=mokodrop
+make nginx I=moko DOMAIN=mokogram.example.com
+```
+
+TLS 가 붙으면 `.env.moko` 의 `COOKIE_SECURE=true` 로 바꾸고 `make up I=moko`.
+
+**운영 명령은 전부 `I=` 로 대상을 고른다** — `make status I=moko`, `make logs I=moko S=api`,
+`make dump I=moko`. `I` 를 빼면 기본 인스턴스(`.env`)가 대상이다.
+코드를 올린 뒤에는 **두 인스턴스 모두** `make up` 해야 사양이 같아진다.
+
 ## 개발
 
 프런트엔드만 따로 고칠 때는 Vite 개발 서버를 쓴다. `/api` 는 백엔드로 넘어간다.

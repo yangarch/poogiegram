@@ -28,7 +28,7 @@ def _client(app) -> TestClient:
     # 인증 의존성이 상태를 먼저 건드린다. 빈 쿠키로 401 까지만 가면 되므로
     # 최소한만 채운다 — 여기서 500 이 나면 "폴백에 안 삼켜졌다"는 신호가 흐려진다.
     app.state.redis = None
-    app.state.settings = SimpleNamespace(session_ttl_seconds=0)
+    app.state.settings = SimpleNamespace(session_ttl_seconds=0, site_name="mokogram")
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -82,6 +82,13 @@ def test_댓글_api도_폴백에_삼켜지지_않는다(with_static):
     asset = "00000000-0000-0000-0000-000000000001"
     assert with_static.get(f"/api/assets/{asset}/comments").status_code == 401
     assert with_static.delete(f"/api/comments/{asset}").status_code == 401
+
+
+def test_화면_이름은_로그인_없이_준다(with_static):
+    """로그인 화면에서부터 어느 인스턴스인지 보여야 한다 (§3.5)."""
+    res = with_static.get("/api/site")
+    assert res.status_code == 200, res.text
+    assert res.json() == {"name": "mokogram"}
 
 
 def test_없는_api는_404다(with_static):

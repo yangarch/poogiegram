@@ -7,6 +7,9 @@
 #
 #   sudo ./deploy/setup-nginx.sh poogiegram.example.com
 #
+# 두 번째 인스턴스(§3.5)는 make 로 부른다. 포트·경로를 환경 파일에서 읽어 넘긴다.
+#   make nginx I=moko DOMAIN=mokogram.example.com
+#
 # 여러 번 실행해도 안전하다. TLS 는 마지막에 certbot 이 붙인다.
 
 set -euo pipefail
@@ -15,9 +18,13 @@ DOMAIN="${1:-}"
 API_PORT="${API_PORT:-8005}"
 MEDIA_ROOT="${MEDIA_ROOT:-/mnt/media}"
 DERIVED_ROOT="${DERIVED_ROOT:-/var/lib/poogiegram/derived}"
+# 인스턴스 이름. 사이트 파일·로그 이름이 여기서 갈린다 — 고정이면 모코를 붙이는 순간
+# 푸기의 서버블록을 덮어쓴다 (§3.5).
+NAME="${NAME:-poogiegram}"
+# 그룹은 인스턴스와 무관하게 하나다. nginx·워커·SFTP 공용 권한 (§3.3).
 GROUP_NAME="poogiegram"
-SITE="/etc/nginx/sites-available/poogiegram.conf"
-ENABLED="/etc/nginx/sites-enabled/poogiegram.conf"
+SITE="/etc/nginx/sites-available/$NAME.conf"
+ENABLED="/etc/nginx/sites-enabled/$NAME.conf"
 
 die() { echo "오류: $*" >&2; exit 1; }
 ok()  { echo "  ✓ $*"; }
@@ -26,7 +33,7 @@ warn(){ echo "  ! $*"; }
 [ -n "$DOMAIN" ] || die "도메인을 지정하세요:  sudo $0 poogiegram.example.com"
 [ "$(id -u)" -eq 0 ] || die "root 로 실행하세요:  sudo $0 $DOMAIN"
 
-echo "== 1. 사전 점검 =="
+echo "== 1. 사전 점검 ($NAME → 127.0.0.1:$API_PORT) =="
 
 command -v nginx >/dev/null || die "nginx 가 설치돼 있지 않습니다."
 nginx -t >/dev/null 2>&1 || die "기존 nginx 설정에 이미 오류가 있습니다. 먼저 해결하세요:  sudo nginx -t"
@@ -138,8 +145,8 @@ server {
         add_header Cache-Control "private, max-age=31536000, immutable";
     }
 
-    access_log /var/log/nginx/poogiegram.access.log;
-    error_log  /var/log/nginx/poogiegram.error.log;
+    access_log /var/log/nginx/$NAME.access.log;
+    error_log  /var/log/nginx/$NAME.error.log;
 }
 CONF
     ok "서버블록 작성: $SITE"
@@ -175,7 +182,7 @@ echo "== 4. 다음 할 일 =="
 cat <<NEXT
 
   HTTPS 로 서비스하므로 쿠키에 Secure 를 켜야 합니다.
-    .env 에서  COOKIE_SECURE=true  로 바꾸고  make up
+    환경 파일(.env 또는 .env.<인스턴스>)에서  COOKIE_SECURE=true  로 바꾸고  make up
 
   (HTTP 로 접속하는 동안 true 로 두면 브라우저가 쿠키를 저장하지 않아
    로그인이 계속 풀립니다. TLS 가 붙은 뒤에 바꾸세요.)
@@ -185,6 +192,6 @@ cat <<NEXT
     브라우저에서 https://$DOMAIN/
 
   문제가 생기면:
-    sudo tail -f /var/log/nginx/poogiegram.error.log
+    sudo tail -f /var/log/nginx/$NAME.error.log
     사진만 안 보이면 www-data 읽기 권한 문제일 가능성이 높습니다.
 NEXT

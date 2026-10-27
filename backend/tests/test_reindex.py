@@ -26,12 +26,12 @@ pytestmark = testdb.guard()
 
 @pytest.fixture
 def settings(tmp_path):
-    """reindex 는 originals_dir 만 본다. 실제 Settings 를 만들 필요가 없다."""
+    """reindex 는 originals_dir 와 마커 이름만 본다. 실제 Settings 를 만들 필요가 없다."""
     from types import SimpleNamespace
 
     originals = tmp_path / "originals"
     (originals / "2026/08/08").mkdir(parents=True)
-    return SimpleNamespace(originals_dir=originals)
+    return SimpleNamespace(originals_dir=originals, storage_marker=".poogiegram-ok")
 
 
 @pytest_asyncio.fixture
