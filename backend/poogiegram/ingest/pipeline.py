@@ -27,11 +27,23 @@ log = logging.getLogger("poogiegram.ingest")
 class FileProblem(Exception):
     """이 파일 자체의 문제. 다시 시도해도 같은 결과다 → failed/ 로 격리한다.
 
-    깨진 파일, 지원하지 않는 형식, 읽을 수 없는 권한 등이 해당한다.
+    깨진 파일, 지원하지 않는 형식 등이 해당한다. **권한은 여기 해당하지 않는다** —
+    아래 NotReadableYet 을 본다.
     **인프라 문제(DB 연결 실패, 스키마 없음, 디스크 가득)는 여기 해당하지 않는다** —
     그건 조건이 바뀌면 성공하므로 파일을 drop/ 에 남겨두고 재시도해야 한다.
     사용자 파일을 인프라 사정으로 격리하면 안 된다.
     """
+
+class NotReadableYet(Exception):
+    """권한이 없어 아직 읽을 수 없다 → drop/ 에 그대로 두고 다음 스캔에서 다시 본다.
+
+    sftp 클라이언트는 원본 파일의 권한을 그대로 요청한다. 맥에서 600 인 사진을 올리면
+    서버에서도 600 이 되어, 그룹 자격으로 접근하는 워커가 읽지 못한다. sshd 로는 이걸
+    강제할 방법이 없어 호스트 타이머가 권한을 고친다 (setup-sftp.sh, §6.1).
+    **권한은 파일 내용과 무관하고 고쳐지면 성공한다** — 격리하면 타이머가 고칠 기회를
+    잃고, 사용자가 failed/ 에서 손으로 되살려야 한다.
+    """
+
 
 _HASH_CHUNK = 1 << 20   # 1MB. 대용량 영상도 메모리에 올리지 않는다
 UNDATED_DIR = "_undated"
@@ -39,7 +51,7 @@ UNDATED_DIR = "_undated"
 
 @dataclass
 class Result:
-    event: str                    # ingested | reindexed | duplicate | restored | failed
+    event: str                    # ingested | reindexed | duplicate | restored | failed | deferred
     asset_id: str | None = None
     detail: str = ""
 
@@ -327,6 +339,8 @@ async def ingest_file(session, settings: Settings, src: Path) -> Result:
 
     try:
         digest = sha256_of(src)
+    except PermissionError as exc:
+        raise NotReadableYet(str(exc)) from exc
     except OSError as exc:
         raise FileProblem(f"읽을 수 없음: {exc}") from exc
 
@@ -395,6 +409,10 @@ async def ingest_one(sessionmaker, settings: Settings, src: Path) -> Result:
                     )
                 )
         return result
+    except NotReadableYet as exc:
+        # 기록(ingest_log)은 남기지 않는다. 스캔마다 쌓이면 이력이 같은 줄로 덮인다.
+        log.warning("그룹 읽기 권한 없음 — drop/ 에 두고 다음 스캔에서 재시도: %s (%s)", src.name, exc)
+        return Result("deferred", detail="그룹 읽기 권한 없음")
     except FileProblem as exc:
         detail = str(exc)
         log.warning("파일 문제로 격리: %s — %s", src.name, detail)
