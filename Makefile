@@ -9,7 +9,7 @@ endif
 
 # ── 인스턴스 (§3.5) ─────────────────────────────────────────────────────
 # I 를 주면 .env.$(I) 를 쓴다. 안 주면 .env(푸기) — 기존 습관을 깨지 않는 쪽이 기본이다.
-#   make up I=moko
+#   make up I=moco
 I ?=
 ENV_FILE := $(if $(I),.env.$(I),.env)
 ifneq ($(I),)
@@ -186,13 +186,13 @@ psql: ## DB 접속
 	$(DC) exec db psql -U $(I_PGUSER) -d $(I_PGDB)
 
 nginx: ## 호스트 nginx 에 서버블록 추가 (DOMAIN=도메인, I=인스턴스)
-	@test -n "$(DOMAIN)" || { echo 'DOMAIN=도메인 을 지정하세요. 예: make nginx I=moko DOMAIN=mokogram.example.com'; exit 1; }
+	@test -n "$(DOMAIN)" || { echo 'DOMAIN=도메인 을 지정하세요. 예: make nginx I=moco DOMAIN=mocogram.example.com'; exit 1; }
 	@# sudo VAR=값 은 sudoers 정책에 따라 막힐 수 있다. env 를 거치면 정책과 무관하다.
 	sudo env NAME=$(PROJECT) API_PORT=$(I_PORT) MEDIA_ROOT=$(I_MEDIA) DERIVED_ROOT=$(I_DERIVED) \
 		./deploy/setup-nginx.sh $(DOMAIN)
 
 sftp: ## SFTP 드롭 폴더 계정 생성 (U=계정명, I=인스턴스)
-	@test -n "$(U)" || { echo 'U=계정명 을 지정하세요. 예: make sftp I=moko U=mokodrop'; exit 1; }
+	@test -n "$(U)" || { echo 'U=계정명 을 지정하세요. 예: make sftp I=moco U=mocodrop'; exit 1; }
 	sudo env NAME=$(PROJECT) MEDIA_ROOT=$(I_MEDIA) ./deploy/setup-sftp.sh $(U)
 
 vainfo: ## 워커 컨테이너에서 VA-API 확인 (§6.4)

@@ -9,7 +9,7 @@
 #   sudo ./deploy/setup-sftp.sh [계정명]
 #
 # 두 번째 인스턴스(§3.5)는 make 로 부른다. 자기 MEDIA_ROOT 의 incoming/ 에 갇힌다.
-#   make sftp I=moko U=mokodrop
+#   make sftp I=moco U=mocodrop
 #
 # 여러 번 실행해도 안전하다.
 
@@ -69,9 +69,14 @@ ok "drop/ · failed/ 쓰기 가능, setgid 설정됨"
 echo
 echo "== 2. 계정 =="
 
+# 새로 만든 것이 있을 때만 마지막에 "다음 할 일"을 보여 준다. 타이머만 설치하려고
+# 다시 돌렸는데 비밀번호를 정하고 sshd 를 재적용하라고 하면 헷갈린다.
+changed=0
+
 if id "$USER_NAME" >/dev/null 2>&1; then
     ok "$USER_NAME 계정이 이미 있습니다"
 else
+    changed=1
     # 홈은 chroot 기준 경로다. 절대 경로를 넣으면 chroot 안에 그 경로가 없어
     # / 로 떨어진다. /drop 이면 접속 즉시 드롭 폴더에 들어간다.
     useradd -M -d /drop -s /usr/sbin/nologin -G "$GROUP_NAME" "$USER_NAME"
@@ -85,6 +90,7 @@ echo "== 3. sshd 설정 =="
 if grep -qE "^Match User $USER_NAME\$" "$SSHD_CONFIG"; then
     ok "sshd_config 에 이미 설정이 있습니다 (건드리지 않음)"
 else
+    changed=1
     cp "$SSHD_CONFIG" "$SSHD_CONFIG.bak-$(date +%F-%H%M)"
     ok "백업: $SSHD_CONFIG.bak-*"
     cat >> "$SSHD_CONFIG" <<CONF
@@ -167,6 +173,12 @@ systemctl daemon-reload
 systemctl enable --now poogiegram-drop-perms.timer >/dev/null
 "$HELPER"
 ok "타이머 동작 중 (30초 간격) — 지금 한 번 돌림"
+
+if [ "$changed" -eq 0 ]; then
+    echo
+    echo "계정과 sshd 설정은 그대로입니다. 더 할 일이 없습니다."
+    exit 0
+fi
 
 echo
 echo "== 5. 다음 할 일 =="

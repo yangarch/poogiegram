@@ -185,7 +185,7 @@ M1 권한 구성(§6.1)에서 워커·SFTP 계정과 함께 처리한다.
 
 ```
 .env         → poogiegram (기본. I 를 주지 않으면 이것)
-.env.moko    → mokogram   (make up I=moko)
+.env.moco    → mocogram   (make up I=moco)
 ```
 
 | 항목 | 인스턴스마다 따로 | 근거 |
@@ -193,10 +193,10 @@ M1 권한 구성(§6.1)에서 워커·SFTP 계정과 함께 처리한다.
 | compose 프로젝트 | `COMPOSE_PROJECT_NAME` | 컨테이너·네트워크·**DB 볼륨 이름**이 여기서 갈린다 |
 | PostgreSQL · Redis | 각자 컨테이너와 볼륨 | 계정·세션·작업 큐가 섞이지 않는다. 호스트 노출은 여전히 없다 (§3.1) |
 | API 포트 | 푸기 8005, 모코 8006 | 둘 다 127.0.0.1 바인딩 |
-| 원본 | `MEDIA_ROOT` — 푸기 `/mnt/media`, 모코 `/mnt/media/moko` | 같은 디스크라 복제 경계(§4.2)가 그대로다 |
+| 원본 | `MEDIA_ROOT` — 푸기 `/mnt/media`, 모코 `/mnt/media/moco` | 같은 디스크라 복제 경계(§4.2)가 그대로다 |
 | 파생물 | `DERIVED_ROOT` — `/var/lib/<이름>/derived` | 둘 다 내장 NVMe (§4.0) |
 | nginx 사이트 | `/etc/nginx/sites-available/<이름>.conf` | 서브도메인마다 서버블록 하나 |
-| SFTP 계정 | 푸기 `poogiedrop`, 모코 `mokodrop` | 각자 자기 `incoming/` 에 갇힌다 |
+| SFTP 계정 | 푸기 `poogiedrop`, 모코 `mocodrop` | 각자 자기 `incoming/` 에 갇힌다 |
 | 화면 이름 | `SITE_NAME` | 로그인 화면과 탭 제목. 둘을 같이 열어 두면 구분이 안 된다 |
 
 **같이 쓰는 것**: 이미지(같은 코드), `poogiegram` 그룹(§3.3 — nginx·워커·SFTP 공용 권한),
@@ -204,18 +204,18 @@ GPU, 호스트 nginx.
 
 **푸기의 경로는 바꾸지 않는다.** 대칭을 맞추려고 `/mnt/media/poogie/` 로 옮기면 깔끔하지만,
 돌아가는 서비스의 원본을 옮기는 일이라 얻는 것에 비해 위험하다. 그 대가로 푸기의
-`MEDIA_ROOT` 안에 `moko/` 가 들어 있게 된다. 푸기 앱이 그 파일을 실제로 건드리는 경로는
+`MEDIA_ROOT` 안에 `moco/` 가 들어 있게 된다. 푸기 앱이 그 파일을 실제로 건드리는 경로는
 없다 — 인제스트는 `incoming/drop/`, 재색인은 `originals/` 만 보고, nginx 의 `/_media/` 는
 앱이 X-Accel-Redirect 로 지시한 경로만 서빙한다. 다만 **푸기 컨테이너에서 모코 파일이
 보이기는 한다**는 점은 인지하고 간다.
 
-**`/mnt/media/moko` 는 root 소유 755 여야 한다.** SFTP chroot 는 대상까지의 모든 상위
+**`/mnt/media/moco` 는 root 소유 755 여야 한다.** SFTP chroot 는 대상까지의 모든 상위
 경로가 root 소유에 그룹 쓰기 불가를 요구한다 (§6.1).
 
 **GPU 는 하나를 나눠 쓴다.** 두 워커가 동시에 트랜스코딩하면 엔진 하나를 놓고 다툰다.
 모코는 `TRANSCODE_CONCURRENCY=1` 로 시작한다. 평소에는 둘이 동시에 몰릴 일이 드물다.
 
-**운영 명령은 `I=` 하나로 대상을 고른다.** `make status I=moko`, `make dump I=moko`.
+**운영 명령은 `I=` 하나로 대상을 고른다.** `make status I=moco`, `make dump I=moco`.
 빼먹으면 푸기를 대상으로 돈다 — 기존 습관을 깨지 않는 쪽을 기본값으로 둔다.
 
 ---

@@ -8,7 +8,7 @@
 #   sudo ./deploy/setup-nginx.sh poogiegram.example.com
 #
 # 두 번째 인스턴스(§3.5)는 make 로 부른다. 포트·경로를 환경 파일에서 읽어 넘긴다.
-#   make nginx I=moko DOMAIN=mokogram.example.com
+#   make nginx I=moco DOMAIN=mocogram.example.com
 #
 # 여러 번 실행해도 안전하다. TLS 는 마지막에 certbot 이 붙인다.
 

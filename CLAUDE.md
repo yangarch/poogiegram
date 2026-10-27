@@ -48,7 +48,7 @@ make psql        # DB 접속
 make vainfo      # 워커 컨테이너에서 VA-API 확인
 make dump        # pg_dump → /mnt/media/db/
 
-make up I=moko   # 두 번째 인스턴스. 모든 명령에 I= 를 붙인다 (§3.5). 빼면 푸기
+make up I=moco   # 두 번째 인스턴스. 모든 명령에 I= 를 붙인다 (§3.5). 빼면 푸기
 ```
 
 ## 환경

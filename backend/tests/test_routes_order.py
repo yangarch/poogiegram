@@ -28,7 +28,7 @@ def _client(app) -> TestClient:
     # 인증 의존성이 상태를 먼저 건드린다. 빈 쿠키로 401 까지만 가면 되므로
     # 최소한만 채운다 — 여기서 500 이 나면 "폴백에 안 삼켜졌다"는 신호가 흐려진다.
     app.state.redis = None
-    app.state.settings = SimpleNamespace(session_ttl_seconds=0, site_name="mokogram")
+    app.state.settings = SimpleNamespace(session_ttl_seconds=0, site_name="mocogram")
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -88,7 +88,7 @@ def test_화면_이름은_로그인_없이_준다(with_static):
     """로그인 화면에서부터 어느 인스턴스인지 보여야 한다 (§3.5)."""
     res = with_static.get("/api/site")
     assert res.status_code == 200, res.text
-    assert res.json() == {"name": "mokogram"}
+    assert res.json() == {"name": "mocogram"}
 
 
 def test_없는_api는_404다(with_static):
